@@ -151,10 +151,14 @@ test('loud scouting: probes past the second on a room raise the starting alarm',
   assert.match(simulate(fixed, good, 6).reason, /too loud/);
 });
 
-test('the scripted lead decodes every tier-2 and tier-3 clue in the bank', async () => {
+test('clue tiers: tier 1 tells all four apart, tier 2 only narrows to a pair, tier 3 is clear', async () => {
   const { ROOM_CLUES } = await import('../src/content.ts');
-  const { readClear } = await import('../lead/scripted.ts');
+  const { readClear, readMetaphor } = await import('../lead/scripted.ts');
   for (const [ob, tiers] of Object.entries(ROOM_CLUES)) {
-    for (const clue of [...tiers[1], ...tiers[2]]) assert.equal(readClear(clue), ob, clue);
+    for (const clue of tiers[0]) assert.equal(readMetaphor(clue), ob, clue);
+    for (const clue of tiers[1]) assert.equal(readClear(clue), null, `tier 2 should not decide: ${clue}`);
+    for (const clue of tiers[2]) assert.equal(readClear(clue), ob, clue);
   }
+  assert.deepEqual(ROOM_CLUES.camera[1], ROOM_CLUES.laser[1]);
+  assert.deepEqual(ROOM_CLUES.shaft[1], ROOM_CLUES.door[1]);
 });

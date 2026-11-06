@@ -12,7 +12,7 @@ Requires Node.js 22.18+ (24 recommended).
 
 ```bash
 npm install
-npm test                    # 22 game tests: generator, simulator, checker, run engine
+npm test                    # 23 game tests: generator, simulator, checker, run engine
 npm run demo -- --serve     # three scripted agents play; open http://localhost:8787
 ```
 
@@ -20,11 +20,13 @@ The demo plays three leads on a fast clock against a mock chain:
 
 | Lead | What it does | Typical result |
 |---|---|---|
-| `solo` | Probes each room twice (quietly) and decodes the images, cracks the route's locks in parallel | cleared |
+| `solo` | Reads each room's tier-1 metaphor (one quiet probe), cracks the route's locks in parallel within the bench budget | cleared |
 | `hire` | Pays the scout, cryptographer and operator NPCs instead of doing the work | cleared, faster, but spent NEAR |
 | `reckless` | Reads one metaphor per room, guesses, submits | fails, e.g. *"Room D: a laser grid. No cutter ready. Alarm."* |
 
 Then open the spectator page to see each run's timeline, the step-by-step replay, and the revealed building.
+
+The scripted leads are a reproducibility harness, not AI: the solo lead knows the clue bank by heart. Over 60 runs each, `solo` and `hire` clear every time and `reckless` fails about 59 in 60, roughly half on a misread room and half on a wrong code.
 
 **Play it with your own agent:** start the server (`npm start`) and tell any agent that can make HTTP calls (Claude Code, Codex, your own) to *"read http://localhost:8787/skill.md and play one run."* Everything it needs is in [`game/public/skill.md`](game/public/skill.md).
 
@@ -56,8 +58,8 @@ Each room hides one obstacle; the vault door always has a lock.
 
 Three workstreams, and they constrain each other:
 
-- **Scout.** Probing a room returns a clue that starts as a metaphor (*"the air here tastes of a coming storm"*) and gets clearer with each probe. But scouting is loud: every probe of a room after the second adds +1 to the alarm the plan starts with. Read the metaphor and keep your margin, or make sure and spend it. Misreading is the main way plans fail.
-- **Cryptographer.** A practice bench answers only "open" or "no". Hints for a lock unlock after 4, 8 and 12 attempts. Only the locks on your route matter.
+- **Scout.** Probing a room returns a clue in three tiers. Tier 1 is a metaphor (*"the air here tastes of a coming storm"*) that tells the four obstacles apart if you read it well. Tier 2 narrows it down but deliberately fits two obstacles (a red light could be a camera or a laser). Tier 3 is clear, but scouting is loud: every probe of a room after the second adds +1 to the alarm the plan starts with. Read the metaphor and keep your margin, or make sure and spend it. Misreading is the main way plans fail.
+- **Cryptographer.** A practice bench answers only "open" or "no", and allows 8 tests per lock, so 0-99 can't be brute-forced. Free hints unlock after 3 and 6 tests; the third, sharpest hint is only sold by the cryptographer NPC. Only the locks on your route matter.
 - **Operator.** The bag holds 8, so you can't pack for every route. Wrong codes cost 3 alarm, the drill 4, the budget is 5.
 
 Every building is dealt so that some route fits the bag and every route that fits needs at least two codes. There is no free route: you crack, drill, or both.
@@ -71,7 +73,7 @@ The player's agent can hire three house NPCs, each with its own NEAR account:
 | NPC | Price | Sells |
 |---|---|---|
 | Scout | 0.1 NEAR | a plain report of one room, with no alarm cost |
-| Cryptographer | 0.1 NEAR | the next hint tier for a lock |
+| Cryptographer | 0.1 NEAR | the next hint tier for a lock, including the third that the bench never gives |
 | Operator | 0.2 NEAR | a dry run of a draft plan: the first failing step and why (max 2) |
 
 Nothing they sell is required, and no NPC holds the whole solution. They sell **time and certainty**. With a 1 NEAR reward, the agent faces a real spending decision: hiring everything costs about half the prize.

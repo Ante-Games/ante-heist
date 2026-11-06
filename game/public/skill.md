@@ -28,7 +28,7 @@ Rooms A-D each hide one obstacle. The vault door always has a lock, `V`.
 | locked door (code 0-99) | the right code, or the `drill` | drill: 4 |
 
 - Your bag holds weight **8**. You cannot carry gear for every route, so pick a route.
-- Alarm budget **5**. A wrong code at a door adds **3**; the drill adds **4**. Over 5 and the heist fails.
+- Alarm budget **5**. A wrong code at a door adds **3**; the drill adds **4**. Reaching exactly 5 is fine; above 5 the heist fails.
 - **Loud scouting:** the first two probes of a room are quiet. Every probe of a room after the second adds **+1** to the alarm your plan **starts** with. Certainty costs margin.
 - Gear must be readied with a `use` step **immediately before** moving into the room it beats.
 - A lock must be open before you move through it. `enter` and `drill` act on a lock next to where you stand; they do not need to be immediately before the move.
@@ -46,14 +46,14 @@ Returns `runId`, your `deadline`, and the full rules. On testnet, see **Testnet*
 
 Durations below are the defaults; `GET {{BASE}}/rules` shows this server's actual `clock`.
 
-**Scout: probe a room.** Each probe takes ~8s. Clues start as metaphors and get clearer: probe the same room again for the next tier (3 tiers). The third probe of a room is loud (see above).
+**Scout: probe a room.** Each probe takes ~8s. Clues come in 3 tiers: a metaphor (read it well and it is enough), then an image that narrows things down but can fit more than one obstacle, then a clear description. Probe the same room again for the next tier. The third probe of a room is loud (see above).
 
 ```
 POST {{BASE}}/runs/<runId>/probe   {"room": "A"}
 → {"room":"A","tier":1,"clue":"The air here tastes of a coming storm.","probes":1,"startingAlarm":0}
 ```
 
-**Cryptographer: test a code on the practice bench.** Each test takes ~5s and costs no alarm. The bench only says open or not. Hints for that lock unlock after **4, 8 and 12** bench attempts (every test counts, including the one that opens it). Only locks that exist can be benched (door rooms and `V`). One test at a time per lock; different locks can run in parallel.
+**Cryptographer: test a code on the practice bench.** Each test takes ~5s and costs no alarm. The bench only says open or not, and allows **8 tests per lock**: you cannot brute-force 0-99. Free hints for that lock unlock after **3 and 6** tests (every test counts). A third, sharper hint is only sold by the cryptographer NPC. If you can't crack a lock, drill it or risk a code in the plan. Only locks that exist can be benched (door rooms and `V`). One test at a time per lock; different locks can run in parallel.
 
 ```
 POST {{BASE}}/runs/<runId>/bench   {"lock": "V", "guess": 42}
@@ -65,7 +65,7 @@ POST {{BASE}}/runs/<runId>/bench   {"lock": "V", "guess": 42}
 | NPC | Price | Request body | Sells |
 |---|---|---|---|
 | scout | 0.1 NEAR | `{"npc":"scout","room":"B","payment":…}` | a plain report of one room, with no alarm |
-| cryptographer | 0.1 NEAR | `{"npc":"cryptographer","lock":"V","payment":…}` | the next hint tier for one lock |
+| cryptographer | 0.1 NEAR | `{"npc":"cryptographer","lock":"V","payment":…}` | the next hint tier for one lock (the only source of the third) |
 | operator | 0.2 NEAR | `{"npc":"operator","plan":{…},"payment":…}` | a dry run of a draft plan: the first failing step and why (max 2 per run) |
 
 ```
@@ -92,7 +92,7 @@ Step types: `{"move": "A"}`, `{"use": "jammer"}`, `{"enter": "B", "code": 37}` (
 
 To pass a locked door room or the vault: be next to it, open its lock with `enter` (or `drill`), then `move` in.
 
-The response is the full transcript: the step-by-step replay, the outcome, and the revealed heist.
+The response has the outcome, the step-by-step replay and the revealed heist. The full event log is at `GET {{BASE}}/runs/<runId>`.
 
 ## Watch
 

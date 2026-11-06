@@ -26,13 +26,14 @@ test('a full run: probe, bench, hire, plan, reveal', async () => {
   assert.deepEqual([p2.startingAlarm, p3.startingAlarm, p4.startingAlarm], [0, 1, 2]);
   assert.equal(p3.clue, heist.clues.A[2]);
 
-  // Lock hints unlock at 4, 8, 12 bench attempts.
+  // Free lock hints unlock at 3 and 6 bench tests; the bench allows 8 per lock.
   const code = heist.codes.V!;
   const wrong = (code + 1) % 100;
   const tiers: number[] = [];
-  for (let i = 0; i < 12; i++) tiers.push((await runs.bench(runId, 'V', wrong)).hints.length);
-  assert.deepEqual(tiers, [0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3]);
+  for (let i = 0; i < 7; i++) tiers.push((await runs.bench(runId, 'V', wrong)).hints.length);
+  assert.deepEqual(tiers, [0, 0, 1, 1, 1, 2, 2]);
   assert.equal((await runs.bench(runId, 'V', code)).open, true);
+  await assert.rejects(runs.bench(runId, 'V', code), (e: GameError) => e.status === 409 && /already opened/.test(e.message));
 
   const scout = await runs.hire(runId, { npc: 'scout', room: 'B', payment: { mock: true } });
   assert.match(String((scout as { report: string }).report), /^Room B holds/);
@@ -46,7 +47,9 @@ test('a full run: probe, bench, hire, plan, reveal', async () => {
   const t = await runs.submit(runId, plan);
   assert.equal(t.status, 'cleared');
   assert.deepEqual(t.heist!.rooms, heist.rooms);
-  assert.ok(t.log.some((e) => e.kind === 'settle' && e.ok));
+  assert.match(t.settlement, /would pay/);
+  const full = runs.view(runId) as { log: { kind: string; ok?: boolean }[] };
+  assert.ok(full.log.some((e) => e.kind === 'settle' && e.ok));
   await assert.rejects(runs.probe(runId, 'A'), (e: GameError) => e.status === 404);
   assert.equal((runs.view(runId) as { status: string }).status, 'cleared');
 });
@@ -84,6 +87,14 @@ test('operator dry runs are capped at two', async () => {
   await runs.hire(runId, { npc: 'operator', plan, payment: { mock: true } });
   await runs.hire(runId, { npc: 'operator', plan, payment: { mock: true } });
   await assert.rejects(runs.hire(runId, { npc: 'operator', plan, payment: { mock: true } }), (e: GameError) => e.status === 409);
+});
+
+test('the bench budget stops brute force at 8 tests per lock', async () => {
+  const { runs } = setup();
+  const { runId } = await runs.create({});
+  const code = generateHeist(runSeed('s3cret', runId)).codes.V!;
+  for (let i = 0; i < 8; i++) await runs.bench(runId, 'V', (code + 1 + i) % 100);
+  await assert.rejects(runs.bench(runId, 'V', code), (e: GameError) => e.status === 409 && /8 tests per lock/.test(e.message));
 });
 
 test('bench rejects rooms without a lock and one-at-a-time is enforced', async () => {

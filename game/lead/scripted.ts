@@ -1,7 +1,8 @@
 // A scripted lead: plays a heist over the HTTP API with no model and no API keys.
 // It exists so judges can reproduce a full run with one command. A real agent plays the
 // same API from /skill.md.
-import { OBSTACLES, ROOMS, GEAR, BAG_CAPACITY, type Obstacle, type RoomId } from '../src/rules.ts';
+import { OBSTACLES, ROOMS, GEAR, BAG_CAPACITY, BENCH_MAX, type Obstacle, type RoomId } from '../src/rules.ts';
+import { ROOM_CLUES } from '../src/content.ts';
 import { routes, planRoute, locksOnRoute, type Knowledge } from '../src/solver.ts';
 import type { LockId } from '../src/heist.ts';
 import type { Plan } from '../src/sim.ts';
@@ -40,6 +41,13 @@ export function readClear(clue: string): Obstacle | null {
   if (/(shaft|pit|drop|floor stops|bolts|line from above|swing)/.test(c)) return 'shaft';
   if (/(laser|threads|beams|lines of light|pulled tight)/.test(c)) return 'laser';
   if (/(camera|red light turns|glass|watches|lens|dome)/.test(c)) return 'camera';
+  return null;
+}
+
+// The scripted lead knows the clue bank by heart, so it reads tier-1 metaphors exactly. It is a
+// reproducibility harness, not an AI: a real agent has to interpret the metaphor.
+export function readMetaphor(clue: string): Obstacle | null {
+  for (const ob of OBSTACLES) if (ROOM_CLUES[ob][0].includes(clue)) return ob;
   return null;
 }
 
@@ -92,12 +100,12 @@ export async function playScripted(o: LeadOptions): Promise<{ runId: string; tra
       log(`  probe ${room}: "${r.clue}" → guessed ${k.rooms[room]}`);
       return;
     }
-    // Probe twice (quiet), decode the tier-2 image; only probe a third time (loud) if unsure.
+    // Read the tier-1 metaphor; probe again (the third probe is loud) only if it can't be read.
     for (;;) {
       const r = await p('probe', { room });
       log(`  probe ${room} (tier ${r.tier}): "${r.clue}"${Number(r.startingAlarm) > 0 ? ` [starting alarm ${r.startingAlarm}]` : ''}`);
-      const ob = Number(r.tier) >= 2 ? readClear(String(r.clue)) : null;
-      if (ob) { k.rooms[room] = ob; return; }
+      const ob = Number(r.tier) === 1 ? readMetaphor(String(r.clue)) : readClear(String(r.clue));
+      if (ob) { k.rooms[room] = ob; log(`    → ${room} is a ${ob}`); return; }
     }
   }));
 
@@ -133,6 +141,12 @@ export async function playScripted(o: LeadOptions): Promise<{ runId: string; tra
       if (r.newHint) log(`  lock ${lock} hint: ${r.newHint}`);
       if (r.open) { k.codes[lock] = guess; log(`  lock ${lock} cracked: ${guess} (${r.attempts} attempts)`); return; }
       wrong.add(guess);
+      if (Number(r.attempts) >= BENCH_MAX) {
+        const best = candidates(hints, wrong)[0] ?? guess;
+        k.codes[lock] = best;
+        log(`  lock ${lock}: bench budget spent; will risk ${best} in the plan`);
+        return;
+      }
       if (o.style === 'reckless' && Number(r.attempts) >= 3) { k.codes[lock] = guess + 1; log(`  lock ${lock}: gave up, will try ${guess + 1}`); return; }
     }
   }));
@@ -146,5 +160,5 @@ export async function playScripted(o: LeadOptions): Promise<{ runId: string; tra
   log(`  plan: bag [${plan.bag.join(', ')}], ${plan.steps.length} steps`);
   const t = await p('plan', plan);
   log(`  result: ${String(t.status).toUpperCase()}: ${t.reason}`);
-  return { runId: id, transcript: t };
+  return { runId: id, transcript: await call<Record<string, unknown>>(o.base, `/runs/${id}`) };
 }

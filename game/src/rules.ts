@@ -32,7 +32,8 @@ export const BENCH_SECONDS = 5;
 export const CLUE_TIERS = 3; // probe 1, 2, 3+ of the same room
 // Loud scouting: every probe of a room past this many adds +1 to the plan's starting alarm.
 export const QUIET_PROBES = 2;
-export const LOCK_HINT_AT = [4, 8, 12] as const; // bench attempts that unlock lock hint tiers 1..3
+export const LOCK_HINT_AT = [3, 6] as const; // bench attempts that unlock free hint tiers 1-2; tier 3 is sold by the cryptographer
+export const BENCH_MAX = 8; // bench tests per lock: no brute force over 0-99
 export const MAX_DRY_RUNS = 2;
 
 export const NPCS = ['scout', 'cryptographer', 'operator'] as const;

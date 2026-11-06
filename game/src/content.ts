@@ -1,7 +1,8 @@
 import type { Obstacle } from './rules.ts';
 
-// Room clues by obstacle and tier. Tier 1 is a metaphor, tier 2 a clearer image, tier 3 plain.
-// Keep tier 1 and 2 cryptic: literal clues make the scout workstream trivial.
+// Room clues by obstacle and tier. Tier 1 is a metaphor that tells the four apart if read well.
+// Tier 2 is deliberately shared by pairs (camera/laser, shaft/door): it narrows, never decides.
+// Tier 3 is clear, and costs alarm (loud scouting). Literal tier-1/2 clues make scouting trivial.
 export const ROOM_CLUES: Record<Obstacle, [string[], string[], string[]]> = {
   camera: [
     [
@@ -10,9 +11,9 @@ export const ROOM_CLUES: Record<Obstacle, [string[], string[], string[]]> = {
       'The corners here always know what the middle is doing.',
     ],
     [
-      'A small red light turns slowly from wall to wall.',
-      'Glass glints near the ceiling and follows your shadow.',
-      'Whatever watches here can be blinded, but not cut.',
+      'A thin red light glows somewhere in the room.',
+      'Something red and fine catches the dust.',
+      'A faint electric whine, and a point of red light.',
     ],
     [
       'A lens on a slow swivel tracks the doorway; blind it and walk through.',
@@ -26,9 +27,9 @@ export const ROOM_CLUES: Record<Obstacle, [string[], string[], string[]]> = {
       'Dust falls here and never reaches the floor in one piece.',
     ],
     [
-      'Thin red threads cross the room at knee height.',
-      'Fine beams stitch the doorway shut; something sharp would unthread them.',
-      'Light is pulled tight across this room like wire.',
+      'A thin red light glows somewhere in the room.',
+      'Something red and fine catches the dust.',
+      'A faint electric whine, and a point of red light.',
     ],
     [
       'Red lines of light crisscross the floor at waist height; break one and the room screams.',
@@ -42,9 +43,9 @@ export const ROOM_CLUES: Record<Obstacle, [string[], string[], string[]]> = {
       'Footsteps here fall a long way before they land.',
     ],
     [
-      'The floor stops halfway; the far side is a long drop away.',
-      'Bolts in the ceiling once held something to swing across on.',
-      'Only a line from above gets anyone over this gap.',
+      'The way across is not open to you yet.',
+      'Your path stops short here; something has to give.',
+      'Cold metal, and no simple way through.',
     ],
     [
       'The floor ends at a deep pit; hooks above could take a line across.',
@@ -58,9 +59,9 @@ export const ROOM_CLUES: Record<Obstacle, [string[], string[], string[]]> = {
       'Something here only opens for those who know its number.',
     ],
     [
-      'A heavy door stands at the far side, with a glowing panel of digits.',
-      'Two-digit buttons are worn smooth beside a steel door.',
-      'Patience or noise will open the door ahead.',
+      'The way across is not open to you yet.',
+      'Your path stops short here; something has to give.',
+      'Cold metal, and no simple way through.',
     ],
     [
       'A steel door with a two-digit keypad; the right number, or a lot of noise, opens it.',

@@ -3,7 +3,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   ROOMS, EDGES, GEAR, BAG_CAPACITY, ALARM_BUDGET, ALARM_WRONG_CODE, ALARM_DRILL, RUN_SECONDS,
-  PROBE_SECONDS, BENCH_SECONDS, CLUE_TIERS, QUIET_PROBES, LOCK_HINT_AT, MAX_DRY_RUNS, NPC_PRICE_YOCTO, REWARD_YOCTO,
+  PROBE_SECONDS, BENCH_SECONDS, CLUE_TIERS, QUIET_PROBES, LOCK_HINT_AT, BENCH_MAX, MAX_DRY_RUNS, NPC_PRICE_YOCTO, REWARD_YOCTO,
   formatNear, isRoom, isNpc, type Npc, type RoomId,
 } from './rules.ts';
 import { generateHeist, runSeed, sha256Hex, type Heist, type LockId } from './heist.ts';
@@ -30,6 +30,7 @@ interface Run {
   probes: Partial<Record<RoomId, number>>;
   attempts: Partial<Record<LockId, number>>;
   boughtTier: Partial<Record<LockId, number>>;
+  opened: Set<LockId>;
   busy: Set<string>;
   receipts: Set<string>;
   verdict: Verdict | null;
@@ -53,6 +54,7 @@ export function rulesSummary(timeScale = 1) {
     clueTiers: CLUE_TIERS,
     loudScouting: `each probe of a room beyond the ${QUIET_PROBES}nd adds +1 to your plan's starting alarm`,
     lockHintsAtAttempts: LOCK_HINT_AT,
+    benchTestsPerLock: BENCH_MAX,
     maxDryRuns: MAX_DRY_RUNS,
     reward: `${formatNear(REWARD_YOCTO)} NEAR`,
     npcs: {
@@ -130,7 +132,7 @@ export class Runs {
     const seed = runSeed(this.o.missionSecret, id);
     const r: Run = {
       id, seed, heist: generateHeist(seed), player, chainRunId, startedAt: this.now(), log: [],
-      probes: {}, attempts: {}, boughtTier: {}, busy: new Set(), receipts: new Set(), verdict: null,
+      probes: {}, attempts: {}, boughtTier: {}, opened: new Set(), busy: new Set(), receipts: new Set(), verdict: null,
     };
     r.log.push({ t: 0, kind: 'start', runId: id, player, chainRunId });
     this.runs.set(id, r);
@@ -151,7 +153,7 @@ export class Runs {
   }
 
   private hintTier(r: Run, lock: LockId): number {
-    const fromAttempts = LOCK_HINT_AT.filter((a) => (r.attempts[lock] ?? 0) >= a).length;
+    const fromAttempts = (LOCK_HINT_AT as readonly number[]).filter((a) => (r.attempts[lock] ?? 0) >= a).length;
     return Math.min(3, Math.max(fromAttempts, r.boughtTier[lock] ?? 0));
   }
 
@@ -165,14 +167,17 @@ export class Runs {
     if (lock !== 'V' && !isRoom(lock)) throw new GameError(400, 'bench a lock: A-D or V');
     if (!Number.isInteger(guess) || (guess as number) < 0 || (guess as number) > 99) throw new GameError(400, 'guess is an integer 0-99');
     if (r.heist.codes[lock] === undefined) throw new GameError(400, `no lock fits ${lock}`);
+    if (r.opened.has(lock)) throw new GameError(409, `lock ${lock} already opened on the bench; use that code in your plan`);
+    if ((r.attempts[lock] ?? 0) >= BENCH_MAX) throw new GameError(409, `the bench allows ${BENCH_MAX} tests per lock and lock ${lock} has used them; read the hints, hire the cryptographer, or drill`);
     await this.spend(r, `bench ${lock}`, BENCH_SECONDS);
     const before = this.hintTier(r, lock);
     r.attempts[lock] = (r.attempts[lock] ?? 0) + 1;
     const open = r.heist.codes[lock] === guess;
+    if (open) r.opened.add(lock);
     const after = this.hintTier(r, lock);
     const hint = after > before ? r.heist.lockHints[lock]![after - 1] : null;
     r.log.push({ t: this.t(r), kind: 'bench', lock, guess: guess as number, open, hint });
-    return { lock, guess, open, attempts: r.attempts[lock], hints: this.hints(r, lock), newHint: hint };
+    return { lock, guess, open, attempts: r.attempts[lock], testsLeft: BENCH_MAX - r.attempts[lock]!, hints: this.hints(r, lock), newHint: hint };
   }
 
   async hire(id: string, body: { npc?: unknown; room?: unknown; lock?: unknown; plan?: unknown; payment?: unknown }) {
@@ -231,7 +236,7 @@ export class Runs {
     if (this.o.dataDir) writeFileSync(join(this.o.dataDir, `${r.id}.json`), JSON.stringify(transcript, null, 2));
     this.ended.set(r.id, transcript);
     this.runs.delete(r.id);
-    return transcript;
+    return { runId: r.id, status: transcript.status, reason: transcript.reason, replay: transcript.replay, heist: transcript.heist, settlement: s.detail, transcript: `/runs/${r.id}` };
   }
 
   private transcript(r: Run) {
