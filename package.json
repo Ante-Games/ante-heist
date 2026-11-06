@@ -14,9 +14,13 @@
     "test:contract": "cd contract && cargo test",
     "demo": "node game/lead/demo.ts",
     "start:testnet": "node --env-file=.env.testnet game/src/server.ts",
-    "testnet": "node --env-file-if-exists=.env.testnet scripts/testnet.ts"
+    "testnet": "node --env-file-if-exists=.env.testnet scripts/testnet.ts",
+    "e2e": "node scripts/sandbox-e2e.ts"
   },
   "dependencies": {
     "near-api-js": "7.4.0"
+  },
+  "devDependencies": {
+    "near-sandbox": "^0.3.5"
   }
 }

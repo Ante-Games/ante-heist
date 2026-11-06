@@ -84,7 +84,7 @@ export class TestnetChain implements Chain {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0', id: 'heist', method: 'query',
-        params: { request_type: 'call_function', finality: 'final', account_id: this.contractId, method_name: method, args_base64: Buffer.from(JSON.stringify(args)).toString('base64') },
+        params: { request_type: 'call_function', finality: 'optimistic', account_id: this.contractId, method_name: method, args_base64: Buffer.from(JSON.stringify(args)).toString('base64') },
       }),
     });
     const body = (await res.json()) as { result?: { result?: number[]; error?: string }; error?: { message?: string; data?: unknown } };
@@ -93,8 +93,15 @@ export class TestnetChain implements Chain {
     return JSON.parse(Buffer.from(body.result.result).toString('utf8')) as T;
   }
 
-  private async getRun(chainRunId: string): Promise<ChainRun | null> {
-    return this.view<ChainRun | null>('get_run', { run_id: Number(chainRunId) });
+  // A transaction the player just sent can take a block or two to show up; retry briefly.
+  private async getRun(chainRunId: string, ready: (r: ChainRun | null) => boolean = (r) => r !== null): Promise<ChainRun | null> {
+    let run: ChainRun | null = null;
+    for (let i = 0; i < 8; i++) {
+      run = await this.view<ChainRun | null>('get_run', { run_id: Number(chainRunId) });
+      if (ready(run)) return run;
+      await new Promise((r) => setTimeout(r, 750));
+    }
+    return run;
   }
 
   async checkStart(chainRunId: string | null, player: string | null): Promise<StartCheck> {
@@ -113,7 +120,7 @@ export class TestnetChain implements Chain {
     if (!chainRunId || !Number.isInteger(idx)) return { ok: false, receipt: '', error: 'testnet: send "payment": {"hireIndex": <index returned by hire>}' };
     const receipt = `run ${chainRunId} hire #${idx}`;
     if (used.has(receipt)) return { ok: false, receipt, error: `hire #${idx} was already spent` };
-    const run = await this.getRun(chainRunId);
+    const run = await this.getRun(chainRunId, (r) => !!r && r.hires.length > (idx as number));
     const h = run?.hires[idx as number];
     if (!h) return { ok: false, receipt, error: `no hire #${idx} on run ${chainRunId}` };
     if (h.npc !== NPC_ENUM[npc]) return { ok: false, receipt, error: `hire #${idx} paid the ${h.npc}, not the ${NPC_ENUM[npc]}` };
