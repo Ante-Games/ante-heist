@@ -85,6 +85,7 @@ export async function playScripted(o: LeadOptions): Promise<{ runId: string; tra
   const p = (path: string, body: unknown) => call<Record<string, unknown>>(o.base, `/runs/${id}/${path}`, body);
   log(`[${o.style}] run ${id}`);
   const k: Knowledge = { rooms: {}, codes: {} };
+  const backups: Partial<Record<LockId, number>> = {};
 
   // 1. Scout. Rooms are probed in parallel; each room's probes are sequential.
   await Promise.all(ROOMS.map(async (room: RoomId) => {
@@ -142,9 +143,10 @@ export async function playScripted(o: LeadOptions): Promise<{ runId: string; tra
       if (r.open) { k.codes[lock] = guess; log(`  lock ${lock} cracked: ${guess} (${r.attempts} attempts)`); return; }
       wrong.add(guess);
       if (Number(r.attempts) >= BENCH_MAX) {
-        const best = candidates(hints, wrong)[0] ?? guess;
-        k.codes[lock] = best;
-        log(`  lock ${lock}: bench budget spent; will risk ${best} in the plan`);
+        const [best, next] = candidates(hints, wrong);
+        k.codes[lock] = best ?? guess;
+        if (next !== undefined) backups[lock] = next;
+        log(`  lock ${lock}: bench budget spent; will risk ${k.codes[lock]}${next !== undefined ? ` then ${next}` : ''} in the plan`);
         return;
       }
       if (o.style === 'reckless' && Number(r.attempts) >= 3) { k.codes[lock] = guess + 1; log(`  lock ${lock}: gave up, will try ${guess + 1}`); return; }
@@ -153,6 +155,12 @@ export async function playScripted(o: LeadOptions): Promise<{ runId: string; tra
 
   // 4. Plan, optionally check it with the operator, then submit once.
   const plan: Plan = planRoute(choice.route, k)!;
+  // One wrong code (+3) fits the alarm budget, so one lock can carry a backup code.
+  const risky = Object.entries(backups)[0] as [LockId, number] | undefined;
+  if (risky) {
+    const at = plan.steps.findIndex((st) => 'enter' in st && st.enter === risky[0]);
+    plan.steps.splice(at + 1, 0, { enter: risky[0], code: risky[1] });
+  }
   if (o.style === 'hire') {
     const r = await p('hire', { npc: 'operator', plan, payment: await o.pay!('operator') });
     log(`  hired operator dry run: ${r.verdict}${r.reason ? ' ' + r.reason : ''}`);

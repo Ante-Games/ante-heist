@@ -72,8 +72,8 @@ export const ROOM_CLUES: Record<Obstacle, [string[], string[], string[]]> = {
 
 export function parityHint(code: number, variant: number): string {
   const even = code % 2 === 0;
-  const lo = Math.max(0, Math.min(60, code - (variant % 40)));
-  const range = `somewhere from ${lo} to ${lo + 39}`;
+  const lo = Math.max(0, Math.min(20, code - (variant % 80)));
+  const range = `somewhere from ${lo} to ${lo + 79}`;
   return even
     ? ['It walks in pairs, ', 'Halve it and nothing is left over; it sits '][variant % 2] + range + '.'
     : ['It always leaves one behind when split, ', 'It refuses to be halved cleanly; it sits '][variant % 2] + range + '.';

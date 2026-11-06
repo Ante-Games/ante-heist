@@ -70,6 +70,16 @@ test('the clock: actions after 600s are refused and a late plan fails', async ()
   assert.match(t.reason!, /clock ran out/);
 });
 
+test('cryptographer reports a room has no lock, for a fee', async () => {
+  const { runs } = setup();
+  const { runId } = await runs.create({});
+  const heist = generateHeist(runSeed('s3cret', runId));
+  const noLock = ROOMS.find((r) => heist.rooms[r] !== 'door')!;
+  const r = await runs.hire(runId, { npc: 'cryptographer', lock: noLock, payment: { mock: true } });
+  assert.match(String((r as { report: string }).report), /no lock/);
+  await assert.rejects(runs.hire(runId, { npc: 'cryptographer', lock: noLock }), (e: GameError) => e.status === 402);
+});
+
 test('cryptographer sells the next tier, up to three', async () => {
   const { runs } = setup();
   const { runId } = await runs.create({});
@@ -97,12 +107,17 @@ test('the bench budget stops brute force at 8 tests per lock', async () => {
   await assert.rejects(runs.bench(runId, 'V', code), (e: GameError) => e.status === 409 && /8 tests per lock/.test(e.message));
 });
 
-test('bench rejects rooms without a lock and one-at-a-time is enforced', async () => {
+test('rooms without a lock bench like a lock that never opens; one-at-a-time is enforced', async () => {
   const slow = new Runs({ missionSecret: 'x', chain: new MockChain(), timeScale: 0.002, dataDir: null });
   const { runId } = await slow.create({});
   const heist = generateHeist(runSeed('x', runId));
+  // A room with no lock benches like a lock that never opens: no free probe from an error.
   const noLock = ROOMS.find((r) => heist.rooms[r] !== 'door')!;
-  await assert.rejects(slow.bench(runId, noLock, 5), (e: GameError) => e.status === 400);
+  for (let g = 0; g < 3; g++) {
+    const b = await slow.bench(runId, noLock, g);
+    assert.equal(b.open, false);
+  }
+  assert.equal((await slow.bench(runId, noLock, 3)).hints.length, 1);
   const a = slow.probe(runId, 'A');
   await assert.rejects(slow.probe(runId, 'A'), (e: GameError) => e.status === 429);
   await Promise.all([a, slow.probe(runId, 'B')]); // different rooms run in parallel

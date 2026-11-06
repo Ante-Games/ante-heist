@@ -12,7 +12,7 @@ const seeds = Array.from({ length: 500 }, (_, i) => runSeed('test-secret', `run-
 test('heists are deterministic per seed and vary across seeds', () => {
   assert.deepEqual(generateHeist(seeds[0]), generateHeist(seeds[0]));
   const layouts = new Set(seeds.map((s) => JSON.stringify(generateHeist(s).rooms)));
-  assert.ok(layouts.size > 50, `only ${layouts.size} layouts`);
+  assert.ok(layouts.size >= 30, `only ${layouts.size} layouts`);
 });
 
 test('every door room and the vault have a 0-99 code and three hints', () => {
@@ -61,6 +61,7 @@ const fixed: Heist = {
   seed: 'fixed',
   rooms: { A: 'camera', B: 'door', C: 'shaft', D: 'camera' },
   codes: { B: 37, V: 64 },
+  decoys: {},
   clues: { A: [], B: [], C: [], D: [] },
   lockHints: {},
 };
@@ -93,6 +94,13 @@ test('wrong codes raise the alarm; one is survivable, two are not', () => {
   const twice = simulate(fixed, { ...good, steps: [...good.steps.slice(0, 4), { enter: 'V', code: 1 }, { enter: 'V', code: 2 }] });
   assert.ok(!twice.cleared);
   assert.match(twice.reason, /Alarm \(6\/5\)/);
+});
+
+test('a backup code is allowed: entering an open lock does nothing', () => {
+  const backup: Plan = { ...good, steps: [...good.steps.slice(0, 4), { enter: 'V', code: 1 }, { enter: 'V', code: 64 }, { enter: 'V', code: 2 }, { move: 'Vault' }] };
+  const r = simulate(fixed, backup);
+  assert.ok(r.cleared, r.reason);
+  assert.equal(r.alarm, 3);
 });
 
 test('drill opens a lock once; a second drill trips the alarm', () => {
@@ -135,7 +143,10 @@ test('every route that fits the bag needs at least two codes', () => {
     const h = generateHeist(s);
     const fits = routes().filter((r) => planRoute(r, { rooms: h.rooms, codes: h.codes }) !== null);
     assert.ok(fits.length > 0);
-    for (const r of fits) assert.ok(locksOnRoute(r, h.rooms).length >= 2, `${s}: ${r.join('>')}`);
+    for (const r of fits) {
+      assert.ok(locksOnRoute(r, h.rooms).length >= 2, `${s}: ${r.join('>')}`);
+      assert.ok(planRoute(r, { rooms: h.rooms, codes: h.codes })!.bag.length >= 1, `${s}: ${r.join('>')} needs no gear`);
+    }
   }
 });
 

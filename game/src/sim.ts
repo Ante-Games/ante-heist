@@ -119,6 +119,10 @@ export function simulate(h: Heist, plan: Plan, startAlarm = 0): SimResult {
         trace.push({ i, step, at, alarm, note: `Drilled lock ${lock} open (alarm ${alarm}/${ALARM_BUDGET}).` });
         continue;
       }
+      if (open.has(lock)) {
+        trace.push({ i, step, at, alarm, note: `Lock ${lock} is already open.` });
+        continue;
+      }
       if (h.codes[lock] === step.code) {
         open.add(lock);
         trace.push({ i, step, at, alarm, note: `Code ${step.code} opens lock ${lock}.` });

@@ -12,7 +12,7 @@ Requires Node.js 22.18+ (24 recommended).
 
 ```bash
 npm install
-npm test                    # 23 game tests: generator, simulator, checker, run engine
+npm test                    # 25 game tests: generator, simulator, checker, run engine
 npm run demo -- --serve     # three scripted agents play; open http://localhost:8787
 ```
 
@@ -26,7 +26,7 @@ The demo plays three leads on a fast clock against a mock chain:
 
 Then open the spectator page to see each run's timeline, the step-by-step replay, and the revealed building.
 
-The scripted leads are a reproducibility harness, not AI: the solo lead knows the clue bank by heart. Over 60 runs each, `solo` and `hire` clear every time and `reckless` fails about 59 in 60, roughly half on a misread room and half on a wrong code.
+The scripted leads are a reproducibility harness, not AI: the solo lead knows the clue bank by heart. Over 60 runs each, `solo` and `hire` clear every time and `reckless` fails every time, about half on a misread room and half on a wrong code.
 
 **Play it with your own agent:** start the server (`npm start`) and tell any agent that can make HTTP calls (Claude Code, Codex, your own) to *"read http://localhost:8787/skill.md and play one run."* Everything it needs is in [`game/public/skill.md`](game/public/skill.md).
 
@@ -62,7 +62,7 @@ Three workstreams, and they constrain each other:
 - **Cryptographer.** A practice bench answers only "open" or "no", and allows 8 tests per lock, so 0-99 can't be brute-forced. Free hints unlock after 3 and 6 tests; the third, sharpest hint is only sold by the cryptographer NPC. Only the locks on your route matter.
 - **Operator.** The bag holds 8, so you can't pack for every route. Wrong codes cost 3 alarm, the drill 4, the budget is 5.
 
-Every building is dealt so that some route fits the bag and every route that fits needs at least two codes. There is no free route: you crack, drill, or both.
+Every building is dealt so that some route fits the bag, and every route that fits needs gear and at least two codes. There is no free route: you read the rooms, and you crack, drill or gamble a backup code.
 
 The route decides the gear and the locks; the bag forces a route; one clock covers all of it. Parallel work (scouting while cracking) helps naturally. Nothing penalises playing solo, and nothing counts how many agents you used.
 

@@ -9,6 +9,7 @@ export interface Heist {
   seed: string;
   rooms: Record<RoomId, Obstacle>;
   codes: Partial<Record<LockId, number>>; // one per door room, plus the vault 'V'
+  decoys: Partial<Record<RoomId, number>>; // non-door rooms: the bench treats them as a lock that never opens
   clues: Record<RoomId, string[]>; // CLUE_TIERS entries
   lockHints: Partial<Record<LockId, string[]>>; // 3 tiers
 }
@@ -58,21 +59,24 @@ export function generateHeist(seed: string): Heist {
     clues[r] = Array.from({ length: CLUE_TIERS }, (_, t) => pick(bank[t]));
   }
 
+  const decoys: Partial<Record<RoomId, number>> = {};
+  for (const r of ROOMS) if (rooms[r] !== 'door') decoys[r] = next() % 100;
+
   const lockHints: Partial<Record<LockId, string[]>> = {};
-  for (const [lock, code] of Object.entries(codes) as [LockId, number][]) {
-    lockHints[lock] = [parityHint(code, next() % 40), digitSumHint(code, next()), lastDigitHint(code, next())];
+  for (const [lock, code] of [...Object.entries(codes), ...Object.entries(decoys)] as [LockId, number][]) {
+    lockHints[lock] = [parityHint(code, next() % 80), digitSumHint(code, next()), lastDigitHint(code, next())];
   }
 
-  return { seed, rooms, codes, clues, lockHints };
+  return { seed, rooms, codes, decoys, clues, lockHints };
 }
 
-// Deal only buildings with tension: some route fits in the bag, and every route that fits
-// needs at least two codes (the vault plus a door), so cracking, the drill and the alarm matter.
+// Deal only buildings with tension: some route fits in the bag, and every route that fits needs
+// gear and at least two codes, so reading rooms, cracking, the drill and the alarm all matter.
 function interesting(rooms: Record<RoomId, Obstacle>): boolean {
   const codes: Partial<Record<LockId, number>> = { V: 0 };
   for (const r of ROOMS) if (rooms[r] === 'door') codes[r] = 0;
-  const fitting = routes().filter((route) => planRoute(route, { rooms, codes }) !== null);
-  return fitting.length > 0 && fitting.every((route) => locksOnRoute(route, rooms).length >= 2);
+  const fitting = routes().map((route) => ({ route, plan: planRoute(route, { rooms, codes }) })).filter((x) => x.plan !== null);
+  return fitting.length > 0 && fitting.every((x) => locksOnRoute(x.route, rooms).length >= 2 && x.plan!.bag.length >= 1);
 }
 
 function sameMix(a: Obstacle[], b: Obstacle[]): boolean {

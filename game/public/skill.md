@@ -32,6 +32,7 @@ Rooms A-D each hide one obstacle. The vault door always has a lock, `V`.
 - **Loud scouting:** the first two probes of a room are quiet. Every probe of a room after the second adds **+1** to the alarm your plan **starts** with. Certainty costs margin.
 - Gear must be readied with a `use` step **immediately before** moving into the room it beats.
 - A lock must be open before you move through it. `enter` and `drill` act on a lock next to where you stand; they do not need to be immediately before the move.
+- You may `enter` the same lock more than once: entering a lock that is already open does nothing. So a backup code costs 3 alarm only if the first code was wrong.
 
 ## 1. Start a run
 
@@ -53,7 +54,7 @@ POST {{BASE}}/runs/<runId>/probe   {"room": "A"}
 → {"room":"A","tier":1,"clue":"The air here tastes of a coming storm.","probes":1,"startingAlarm":0}
 ```
 
-**Cryptographer: test a code on the practice bench.** Each test takes ~5s and costs no alarm. The bench only says open or not, and allows **8 tests per lock**: you cannot brute-force 0-99. Free hints for that lock unlock after **3 and 6** tests (every test counts). A third, sharper hint is only sold by the cryptographer NPC. If you can't crack a lock, drill it or risk a code in the plan. Only locks that exist can be benched (door rooms and `V`). One test at a time per lock; different locks can run in parallel.
+**Cryptographer: test a code on the practice bench.** Each test takes ~5s and costs no alarm. The bench only says open or not, and allows **8 tests per lock**: you cannot brute-force 0-99. Free hints for that lock unlock after **3 and 6** tests (every test counts). A third, sharper hint is only sold by the cryptographer NPC. If you can't crack a lock, drill it or risk a code in the plan. You can bench `V` or any room; a room with no lock gives no error, it just never opens. One test at a time per lock; different locks can run in parallel. Codes are two digits: 7 is `07`, digits 0 and 7.
 
 ```
 POST {{BASE}}/runs/<runId>/bench   {"lock": "V", "guess": 42}

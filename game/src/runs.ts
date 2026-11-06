@@ -166,13 +166,12 @@ export class Runs {
     this.live(r);
     if (lock !== 'V' && !isRoom(lock)) throw new GameError(400, 'bench a lock: A-D or V');
     if (!Number.isInteger(guess) || (guess as number) < 0 || (guess as number) > 99) throw new GameError(400, 'guess is an integer 0-99');
-    if (r.heist.codes[lock] === undefined) throw new GameError(400, `no lock fits ${lock}`);
     if (r.opened.has(lock)) throw new GameError(409, `lock ${lock} already opened on the bench; use that code in your plan`);
     if ((r.attempts[lock] ?? 0) >= BENCH_MAX) throw new GameError(409, `the bench allows ${BENCH_MAX} tests per lock and lock ${lock} has used them; read the hints, hire the cryptographer, or drill`);
     await this.spend(r, `bench ${lock}`, BENCH_SECONDS);
     const before = this.hintTier(r, lock);
     r.attempts[lock] = (r.attempts[lock] ?? 0) + 1;
-    const open = r.heist.codes[lock] === guess;
+    const open = r.heist.codes[lock] !== undefined && r.heist.codes[lock] === guess; // non-door rooms never open
     if (open) r.opened.add(lock);
     const after = this.hintTier(r, lock);
     const hint = after > before ? r.heist.lockHints[lock]![after - 1] : null;
@@ -201,12 +200,16 @@ export class Runs {
       answer = { room: body.room, report: `Room ${body.room} holds ${describe(r.heist.rooms[body.room])}.` };
     } else if (npc === 'cryptographer') {
       const lock = body.lock;
-      if ((lock !== 'V' && !isRoom(lock)) || r.heist.codes[lock] === undefined) throw new GameError(400, 'cryptographer needs "lock": a lock that exists (A-D or V)');
+      if (lock !== 'V' && !isRoom(lock)) throw new GameError(400, 'cryptographer needs "lock": A-D or V');
       if (this.hintTier(r, lock) >= 3) throw new GameError(409, `every hint for lock ${lock} is already unlocked`);
       receipt = await pay();
       target = lock;
-      r.boughtTier[lock] = this.hintTier(r, lock) + 1;
-      answer = { lock, hints: this.hints(r, lock) };
+      if (r.heist.codes[lock] === undefined) {
+        answer = { lock, report: `There is no lock in Room ${lock}. Whatever is on your bench there will never open.` };
+      } else {
+        r.boughtTier[lock] = this.hintTier(r, lock) + 1;
+        answer = { lock, hints: this.hints(r, lock) };
+      }
     } else {
       const used = r.log.filter((e) => e.kind === 'hire' && e.npc === 'operator').length;
       if (used >= MAX_DRY_RUNS) throw new GameError(409, `the operator only does ${MAX_DRY_RUNS} dry runs per heist`);
