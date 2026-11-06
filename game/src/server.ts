@@ -25,7 +25,12 @@ async function route(req: IncomingMessage, res: ServerResponse, runs: Runs, chai
   const m = req.method ?? 'GET';
 
   if (m === 'GET' && parts.length === 0) return file(res, 'index.html', 'text/html; charset=utf-8');
-  if (m === 'GET' && url.pathname === '/skill.md') return file(res, 'skill.md', 'text/markdown; charset=utf-8');
+  if (m === 'GET' && url.pathname === '/skill.md') {
+    const proto = String(req.headers['x-forwarded-proto'] ?? 'http').split(',')[0];
+    const base = process.env.PUBLIC_URL ?? `${proto}://${req.headers.host ?? 'localhost'}`;
+    res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8' });
+    return res.end(readFileSync(join(PUBLIC, 'skill.md'), 'utf8').replaceAll('{{BASE}}', base));
+  }
   if (m === 'GET' && url.pathname === '/rules') return json(res, 200, { ...rulesSummary(), chain: chain.describe(), commitment: runs.commitment });
   if (m === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true });
 

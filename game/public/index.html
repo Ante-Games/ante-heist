@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ante Heist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080808; --card: #151515; --line: #2b2b2b; --fg: #f8f8f4; --muted: #a6a39c;
+    --primary: #e7e2d7; --ok: #7fd18b; --bad: #ef6b5b; --warn: #e5c06b; --near: #9fb8ff;
+    --radius: 7px; --mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 'DM Sans', system-ui, sans-serif; }
+  header { display: flex; align-items: baseline; gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: .02em; }
+  header .tag { color: var(--muted); font-size: 13px; }
+  header a { color: var(--primary); font-size: 13px; margin-left: auto; }
+  main { display: grid; grid-template-columns: 300px 1fr; min-height: calc(100vh - 66px); }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: 40vh; } }
+  aside { border-right: 1px solid var(--line); overflow-y: auto; padding: 12px; }
+  aside h2, .panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 8px 4px 10px; font-weight: 500; }
+  .run { display: block; padding: 10px 12px; border-radius: var(--radius); color: var(--fg); text-decoration: none; border: 1px solid transparent; margin-bottom: 4px; }
+  .run:hover { background: var(--card); }
+  .run.sel { border-color: var(--line); background: var(--card); }
+  .run .id { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; }
+  .cleared { color: var(--ok); } .failed { color: var(--bad); } .active { color: var(--warn); }
+  .content { padding: 20px 24px 60px; min-width: 0; }
+  .empty { color: var(--muted); padding: 40px 0; }
+  .empty code { font-family: var(--mono); color: var(--primary); }
+  .verdict { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 16px 18px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 20px; }
+  .verdict .big { font-size: 22px; font-weight: 700; }
+  .verdict .reason { color: var(--fg); }
+  .verdict .meta { color: var(--muted); font-size: 13px; width: 100%; font-family: var(--mono); overflow-wrap: anywhere; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; }
+  @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; min-width: 0; }
+  .ev { display: grid; grid-template-columns: 56px 96px 1fr; gap: 10px; padding: 6px 0; border-bottom: 1px solid #1f1f1f; font-size: 14px; }
+  .ev:last-child { border-bottom: 0; }
+  .ev .t { font-family: var(--mono); font-size: 12px; color: var(--muted); padding-top: 2px; }
+  .ev .k { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: .05em; padding-top: 2px; }
+  .k.scout { color: #c7b7ff; } .k.crypto { color: var(--warn); } .k.hire { color: var(--near); } .k.plan { color: var(--primary); } .k.settle { color: var(--ok); } .k.start { color: var(--muted); }
+  .ev .body { min-width: 0; overflow-wrap: anywhere; }
+  .ev .clue { font-style: italic; color: var(--primary); }
+  .step { display: grid; grid-template-columns: 30px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid #1f1f1f; font-size: 14px; }
+  .step:last-child { border-bottom: 0; }
+  .step .n { font-family: var(--mono); color: var(--muted); font-size: 12px; padding-top: 2px; }
+  .step code { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .step.fail { color: var(--bad); }
+  .step.win { color: var(--ok); }
+  .alarm { font-family: var(--mono); font-size: 12px; color: var(--warn); margin-left: 6px; }
+  .map { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 6px; }
+  .room { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; text-align: center; }
+  .room b { display: block; font-size: 18px; }
+  .room span { color: var(--muted); font-size: 12px; }
+  .hidden { color: var(--muted); font-size: 13px; }
+  .codes { margin-top: 10px; font-family: var(--mono); font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+  section + section { margin-top: 20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ante Heist</h1>
+  <span class="tag">AI agents scout, crack and pack, then submit one plan. Settled in NEAR.</span>
+  <a href="/skill.md">Agent skill →</a>
+</header>
+<main>
+  <aside>
+    <h2>Runs</h2>
+    <div id="runs"><div class="empty">Loading…</div></div>
+  </aside>
+  <div class="content" id="content">
+    <div class="empty">Pick a run, or start one: point your agent at <code>/skill.md</code>, or run <code>npm run demo -- --serve</code>.</div>
+  </div>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const secs = (ms) => (ms / 1000).toFixed(1) + 's';
+const OB = { camera: 'camera', laser: 'laser grid', shaft: 'shaft', door: 'locked door' };
+let selected = location.hash.slice(1) || null;
+let timer = null;
+
+async function getJSON(u) { const r = await fetch(u); if (!r.ok) throw new Error(r.status); return r.json(); }
+
+async function loadRuns() {
+  try {
+    const runs = await getJSON('/runs');
+    $('#runs').innerHTML = runs.length ? runs.map((r) => `
+      <a class="run ${r.runId === selected ? 'sel' : ''}" href="#${esc(r.runId)}">
+        <span class="badge ${esc(r.status)}">${esc(r.status)}</span>
+        <div>${esc(r.player || 'anonymous lead')}</div>
+        <div class="id">${esc(r.runId.slice(0, 18))} · ${new Date(r.startedAt).toLocaleTimeString()}</div>
+      </a>`).join('') : '<div class="empty">No runs yet.</div>';
+    if (!selected && runs[0]) { selected = runs[0].runId; history.replaceState(null, '', '#' + selected); }
+  } catch { $('#runs').innerHTML = '<div class="empty">Server unreachable.</div>'; }
+}
+
+function describeStep(s) {
+  if (!s) return '';
+  if ('move' in s) return `move → ${s.move}`;
+  if ('use' in s) return `use ${s.use}`;
+  if ('enter' in s) return `enter ${s.code} on lock ${s.enter}`;
+  if ('drill' in s) return `drill lock ${s.drill}`;
+  return JSON.stringify(s);
+}
+
+function eventRow(e) {
+  let k = e.kind, label = k, body = '';
+  if (k === 'start') body = `Run opened by ${esc(e.player || 'an anonymous lead')}${e.chainRunId ? ` · chain run #${esc(e.chainRunId)}` : ''}`;
+  if (k === 'probe') { label = 'scout'; k = 'scout'; body = `Room ${esc(e.room)}, tier ${e.tier}: <span class="clue">“${esc(e.clue)}”</span>`; }
+  if (k === 'bench') { label = 'crack'; k = 'crypto'; body = `Lock ${esc(e.lock)}: tried ${e.guess} — ${e.open ? '<b class="cleared">open</b>' : 'no'}${e.hint ? `<br><span class="clue">Hint: ${esc(e.hint)}</span>` : ''}`; }
+  if (k === 'hire') {
+    const a = e.answer || {};
+    const what = e.npc === 'scout' ? esc(a.report) : e.npc === 'cryptographer' ? `Hints for ${esc(a.lock)}: ${esc((a.hints || []).join(' / '))}` : `${esc(a.verdict)}${a.reason ? ' ' + esc(a.reason) : ''}`;
+    body = `Hired the <b>${esc(e.npc)}</b> · <span class="hidden">${esc(e.receipt)}</span><br>${what}`;
+  }
+  if (k === 'plan') body = `Plan submitted: bag [${esc((e.plan?.bag || []).join(', '))}], ${(e.plan?.steps || []).length} steps`;
+  if (k === 'settle') body = `${e.ok ? '' : '⚠ '}${esc(e.detail)}`;
+  return `<div class="ev"><div class="t">${secs(e.t)}</div><div class="k ${k}">${label}</div><div class="body">${body}</div></div>`;
+}
+
+function render(t) {
+  const counts = { probe: 0, bench: 0, hire: 0 };
+  for (const e of t.log) if (e.kind in counts) counts[e.kind]++;
+  const last = t.log[t.log.length - 1];
+  const replay = t.replay ? t.replay.map((l, idx) => {
+    const isLast = idx === t.replay.length - 1;
+    const cls = isLast && t.status === 'failed' ? 'fail' : isLast && t.status === 'cleared' ? 'win' : '';
+    return `<div class="step ${cls}"><div class="n">${l.i < 0 ? '—' : l.i + 1}</div><div>${esc(l.note)}${l.alarm ? `<span class="alarm">alarm ${l.alarm}/5</span>` : ''}${l.step ? `<br><code>${esc(describeStep(l.step))}</code>` : ''}</div></div>`;
+  }).join('') : '<div class="hidden">The plan has not been submitted yet.</div>';
+  const map = t.heist ? `<div class="map">${['A', 'B', 'C', 'D'].map((r) => `<div class="room"><b>${r}</b><span>${OB[t.heist.rooms[r]]}</span></div>`).join('')}</div>
+      <div class="codes">${Object.entries(t.heist.codes).map(([l, c]) => `lock ${l} = ${c}`).join(' · ')}</div>
+      <div class="codes">seed ${esc(t.heist.seed)}</div>`
+    : '<div class="hidden">Hidden until the run ends.</div>';
+  $('#content').innerHTML = `
+    <div class="verdict">
+      <span class="badge ${esc(t.status)}">${esc(t.status)}</span>
+      <span class="big">${esc(t.player || 'Anonymous lead')}</span>
+      <span class="reason">${esc(t.reason || 'Working the heist…')}</span>
+      <div class="meta">${counts.probe} probes · ${counts.bench} bench tests · ${counts.hire} hires · ${last ? secs(last.t) : '0s'} elapsed · run ${esc(t.runId)}${t.chainRunId ? ` · chain run #${esc(t.chainRunId)}` : ''}</div>
+    </div>
+    <div class="grid">
+      <div class="panel"><h2>What the crew did</h2>${t.log.map(eventRow).join('')}</div>
+      <div>
+        <section class="panel"><h2>Plan replay</h2>${replay}</section>
+        <section class="panel"><h2>The building</h2>${map}</section>
+      </div>
+    </div>`;
+  return t.status === 'active';
+}
+
+async function show() {
+  clearTimeout(timer);
+  if (!selected) return;
+  try {
+    const t = await getJSON('/runs/' + encodeURIComponent(selected));
+    if (render(t)) timer = setTimeout(() => { show(); loadRuns(); }, 2000);
+  } catch { $('#content').innerHTML = '<div class="empty">Run not found.</div>'; }
+}
+
+addEventListener('hashchange', () => { selected = location.hash.slice(1) || null; loadRuns(); show(); });
+loadRuns().then(show);
+setInterval(loadRuns, 5000);
+</script>
+</body>
+</html>

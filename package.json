@@ -12,7 +12,9 @@
     "start": "node game/src/server.ts",
     "test": "node --test \"game/test/*.test.ts\"",
     "test:contract": "cd contract && cargo test",
-    "demo": "node game/lead/demo.ts"
+    "demo": "node game/lead/demo.ts",
+    "start:testnet": "node --env-file=.env.testnet game/src/server.ts",
+    "testnet": "node --env-file-if-exists=.env.testnet scripts/testnet.ts"
   },
   "dependencies": {
     "near-api-js": "7.4.0"

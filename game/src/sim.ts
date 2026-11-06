@@ -94,6 +94,7 @@ export function simulate(h: Heist, plan: Plan): SimResult {
   let alarm = 0;
   let prepared: Gear | null = null; // gear used on the immediately preceding step
   const open = new Set<LockId>();
+  const lastWrong = new Map<LockId, number>();
 
   for (const [i, step] of plan.steps.entries()) {
     const prev = prepared;
@@ -122,6 +123,7 @@ export function simulate(h: Heist, plan: Plan): SimResult {
         continue;
       }
       alarm += ALARM_WRONG_CODE;
+      lastWrong.set(lock, step.code);
       if (alarm > ALARM_BUDGET) return fail(i, at, alarm, `Code ${step.code} is wrong for lock ${lock}. Alarm (${alarm}/${ALARM_BUDGET}).`, step);
       trace.push({ i, step, at, alarm, note: `Code ${step.code} is wrong for lock ${lock} (alarm ${alarm}/${ALARM_BUDGET}).` });
       continue;
@@ -130,7 +132,11 @@ export function simulate(h: Heist, plan: Plan): SimResult {
     const to = step.move;
     if (!neighbors(at).includes(to)) return fail(i, at, alarm, `${to} is not reachable from ${at}.`, step);
     const lock = lockFor(h, to);
-    if (lock && !open.has(lock)) return fail(i, at, alarm, `${to === 'Vault' ? 'The vault door' : `Room ${to}`} is locked.`, step);
+    if (lock && !open.has(lock)) {
+      const what = to === 'Vault' ? 'The vault door' : `Room ${to}`;
+      const why = lastWrong.has(lock) ? ` is still locked: code ${lastWrong.get(lock)} was wrong.` : ' is locked.';
+      return fail(i, at, alarm, what + why, step);
+    }
     if (isRoom(to)) {
       const ob = h.rooms[to as RoomId];
       if (ob !== 'door') {

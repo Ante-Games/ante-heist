@@ -5,3 +5,4 @@ data/
 contract/target/
 contract/res/
 .DS_Store
+.env.*
