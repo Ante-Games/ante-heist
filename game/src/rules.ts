@@ -1,0 +1,71 @@
+// Fixed rules of the heist. Every number here is a starting value to tune.
+
+export const ROOMS = ['A', 'B', 'C', 'D'] as const;
+export type RoomId = (typeof ROOMS)[number];
+export type Place = 'Lobby' | RoomId | 'Vault';
+
+// Lobby → A/B, A ↔ B, A → C, B → D, C/D → Vault.
+export const EDGES: ReadonlyArray<readonly [Place, Place]> = [
+  ['Lobby', 'A'], ['Lobby', 'B'], ['A', 'B'], ['A', 'C'], ['B', 'D'], ['C', 'Vault'], ['D', 'Vault'],
+];
+
+export const OBSTACLES = ['camera', 'laser', 'shaft', 'door'] as const;
+export type Obstacle = (typeof OBSTACLES)[number];
+
+export const GEAR = {
+  jammer: { weight: 3, beats: 'camera' },
+  cutter: { weight: 4, beats: 'laser' },
+  rope: { weight: 3, beats: 'shaft' },
+  drill: { weight: 5, beats: 'door' },
+} as const;
+export type Gear = keyof typeof GEAR;
+export const GEAR_NAMES = Object.keys(GEAR) as Gear[];
+
+export const BAG_CAPACITY = 9;
+export const ALARM_BUDGET = 5;
+export const ALARM_WRONG_CODE = 3;
+export const ALARM_DRILL = 4;
+
+export const RUN_SECONDS = 600;
+export const PROBE_SECONDS = 5;
+export const BENCH_SECONDS = 5;
+export const CLUE_TIERS = 3; // probe 1, 2, 3+ of the same room
+export const LOCK_HINT_AT = [4, 8, 12] as const; // bench attempts that unlock lock hint tiers 1..3
+export const MAX_DRY_RUNS = 2;
+
+export const NPCS = ['scout', 'cryptographer', 'operator'] as const;
+export type Npc = (typeof NPCS)[number];
+// Prices in yoctoNEAR (1 NEAR = 10^24). Mirrored by the contract's defaults.
+export const NPC_PRICE_YOCTO: Record<Npc, bigint> = {
+  scout: 10n ** 23n, // 0.1 NEAR
+  cryptographer: 10n ** 23n, // 0.1 NEAR
+  operator: 2n * 10n ** 23n, // 0.2 NEAR
+};
+export const REWARD_YOCTO = 10n ** 24n; // 1 NEAR
+
+export function neighbors(p: Place): Place[] {
+  const out: Place[] = [];
+  for (const [a, b] of EDGES) {
+    if (a === p) out.push(b);
+    else if (b === p) out.push(a);
+  }
+  return out;
+}
+
+export function isRoom(x: unknown): x is RoomId {
+  return typeof x === 'string' && (ROOMS as readonly string[]).includes(x);
+}
+
+export function isGear(x: unknown): x is Gear {
+  return typeof x === 'string' && x in GEAR;
+}
+
+export function isNpc(x: unknown): x is Npc {
+  return typeof x === 'string' && (NPCS as readonly string[]).includes(x);
+}
+
+export function formatNear(yocto: bigint): string {
+  const whole = yocto / 10n ** 24n;
+  const frac = (yocto % 10n ** 24n).toString().padStart(24, '0').replace(/0+$/, '');
+  return frac ? `${whole}.${frac}` : `${whole}`;
+}

@@ -1,0 +1,265 @@
+import { randomUUID } from 'node:crypto';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  ROOMS, EDGES, GEAR, BAG_CAPACITY, ALARM_BUDGET, ALARM_WRONG_CODE, ALARM_DRILL, RUN_SECONDS,
+  PROBE_SECONDS, BENCH_SECONDS, CLUE_TIERS, LOCK_HINT_AT, MAX_DRY_RUNS, NPC_PRICE_YOCTO, REWARD_YOCTO,
+  formatNear, isRoom, isNpc, type Npc, type RoomId,
+} from './rules.ts';
+import { generateHeist, runSeed, sha256Hex, type Heist, type LockId } from './heist.ts';
+import { parsePlan, simulate } from './sim.ts';
+import { replay, type LogEvent, type Verdict } from './checker.ts';
+import type { Chain } from './chain.ts';
+
+export class GameError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+interface Run {
+  id: string;
+  seed: string;
+  heist: Heist;
+  player: string | null;
+  chainRunId: string | null;
+  startedAt: number; // epoch ms
+  log: LogEvent[];
+  probes: Partial<Record<RoomId, number>>;
+  attempts: Partial<Record<LockId, number>>;
+  boughtTier: Partial<Record<LockId, number>>;
+  busy: Set<string>;
+  receipts: Set<string>;
+  verdict: Verdict | null;
+}
+
+export interface RunsOptions {
+  missionSecret: string;
+  chain: Chain;
+  timeScale?: number; // multiplies probe/bench durations; 0 in tests
+  now?: () => number;
+  dataDir?: string | null;
+}
+
+export function rulesSummary() {
+  return {
+    map: { places: ['Lobby', ...ROOMS, 'Vault'], edges: EDGES },
+    gear: GEAR,
+    bagCapacity: BAG_CAPACITY,
+    alarm: { budget: ALARM_BUDGET, wrongCode: ALARM_WRONG_CODE, drill: ALARM_DRILL },
+    clock: { runSeconds: RUN_SECONDS, probeSeconds: PROBE_SECONDS, benchSeconds: BENCH_SECONDS },
+    clueTiers: CLUE_TIERS,
+    lockHintsAtAttempts: LOCK_HINT_AT,
+    maxDryRuns: MAX_DRY_RUNS,
+    reward: `${formatNear(REWARD_YOCTO)} NEAR`,
+    npcs: {
+      scout: { price: `${formatNear(NPC_PRICE_YOCTO.scout)} NEAR`, sells: 'a plain report of one room: {"npc":"scout","room":"A"}' },
+      cryptographer: { price: `${formatNear(NPC_PRICE_YOCTO.cryptographer)} NEAR`, sells: 'the next hint tier for one lock: {"npc":"cryptographer","lock":"V"}' },
+      operator: { price: `${formatNear(NPC_PRICE_YOCTO.operator)} NEAR`, sells: `a dry run of a draft plan, first failing step (max ${MAX_DRY_RUNS}): {"npc":"operator","plan":{...}}` },
+    },
+  };
+}
+
+export class Runs {
+  private runs = new Map<string, Run>();
+  private chainRuns = new Map<string, string>();
+  private ended = new Map<string, unknown>(); // transcripts of finished runs loaded from disk
+  private timeScale: number;
+  private now: () => number;
+  readonly commitment: string;
+
+  private o: RunsOptions;
+
+  constructor(o: RunsOptions) {
+    this.o = o;
+    this.timeScale = o.timeScale ?? 1;
+    this.now = o.now ?? Date.now;
+    this.commitment = sha256Hex(o.missionSecret);
+    if (o.dataDir) {
+      mkdirSync(o.dataDir, { recursive: true });
+      for (const f of readdirSync(o.dataDir)) {
+        if (!f.endsWith('.json')) continue;
+        try {
+          const t = JSON.parse(readFileSync(join(o.dataDir, f), 'utf8')) as { runId: string };
+          this.ended.set(t.runId, t);
+        } catch { /* skip unreadable transcript */ }
+      }
+    }
+  }
+
+  private get(id: string): Run {
+    const r = this.runs.get(id);
+    if (!r) throw new GameError(404, `no active run ${id}`);
+    return r;
+  }
+
+  private t(r: Run): number {
+    return this.now() - r.startedAt;
+  }
+
+  private live(r: Run): void {
+    if (r.verdict) throw new GameError(409, 'this run is over');
+    if (this.t(r) > RUN_SECONDS * 1000) throw new GameError(410, `the ${RUN_SECONDS}s clock ran out; submit nothing more`);
+  }
+
+  private async spend(r: Run, key: string, seconds: number): Promise<void> {
+    if (r.busy.has(key)) throw new GameError(429, `${key} is busy; one at a time per room or lock`);
+    r.busy.add(key);
+    try {
+      const ms = seconds * 1000 * this.timeScale;
+      if (ms > 0) await new Promise((res) => setTimeout(res, ms));
+    } finally {
+      r.busy.delete(key);
+    }
+  }
+
+  async create(body: { player?: unknown; chainRunId?: unknown }) {
+    const player = typeof body.player === 'string' ? body.player : null;
+    const chainRunId = body.chainRunId == null ? null : String(body.chainRunId);
+    if (chainRunId && this.chainRuns.has(chainRunId)) throw new GameError(409, `chain run ${chainRunId} already has a heist: ${this.chainRuns.get(chainRunId)}`);
+    const check = await this.o.chain.checkStart(chainRunId, player);
+    if (!check.ok) throw new GameError(400, check.error ?? 'chain check failed');
+    const id = chainRunId ? `chain-${chainRunId}` : randomUUID();
+    const seed = runSeed(this.o.missionSecret, id);
+    const r: Run = {
+      id, seed, heist: generateHeist(seed), player, chainRunId, startedAt: this.now(), log: [],
+      probes: {}, attempts: {}, boughtTier: {}, busy: new Set(), receipts: new Set(), verdict: null,
+    };
+    r.log.push({ t: 0, kind: 'start', runId: id, player, chainRunId });
+    this.runs.set(id, r);
+    if (chainRunId) this.chainRuns.set(chainRunId, id);
+    return { runId: id, deadline: new Date(r.startedAt + RUN_SECONDS * 1000).toISOString(), commitment: this.commitment, rules: rulesSummary() };
+  }
+
+  async probe(id: string, room: unknown) {
+    const r = this.get(id);
+    this.live(r);
+    if (!isRoom(room)) throw new GameError(400, 'probe a room: A, B, C or D');
+    await this.spend(r, `probe ${room}`, PROBE_SECONDS);
+    const n = (r.probes[room] = (r.probes[room] ?? 0) + 1);
+    const tier = Math.min(n, CLUE_TIERS);
+    const clue = r.heist.clues[room][tier - 1];
+    r.log.push({ t: this.t(r), kind: 'probe', room, tier, clue });
+    return { room, tier, clue, probes: n };
+  }
+
+  private hintTier(r: Run, lock: LockId): number {
+    const fromAttempts = LOCK_HINT_AT.filter((a) => (r.attempts[lock] ?? 0) >= a).length;
+    return Math.min(3, Math.max(fromAttempts, r.boughtTier[lock] ?? 0));
+  }
+
+  private hints(r: Run, lock: LockId): string[] {
+    return (r.heist.lockHints[lock] ?? []).slice(0, this.hintTier(r, lock));
+  }
+
+  async bench(id: string, lock: unknown, guess: unknown) {
+    const r = this.get(id);
+    this.live(r);
+    if (lock !== 'V' && !isRoom(lock)) throw new GameError(400, 'bench a lock: A-D or V');
+    if (!Number.isInteger(guess) || (guess as number) < 0 || (guess as number) > 99) throw new GameError(400, 'guess is an integer 0-99');
+    if (r.heist.codes[lock] === undefined) throw new GameError(400, `no lock fits ${lock}`);
+    await this.spend(r, `bench ${lock}`, BENCH_SECONDS);
+    const before = this.hintTier(r, lock);
+    r.attempts[lock] = (r.attempts[lock] ?? 0) + 1;
+    const open = r.heist.codes[lock] === guess;
+    const after = this.hintTier(r, lock);
+    const hint = after > before ? r.heist.lockHints[lock]![after - 1] : null;
+    r.log.push({ t: this.t(r), kind: 'bench', lock, guess: guess as number, open, hint });
+    return { lock, guess, open, attempts: r.attempts[lock], hints: this.hints(r, lock), newHint: hint };
+  }
+
+  async hire(id: string, body: { npc?: unknown; room?: unknown; lock?: unknown; plan?: unknown; payment?: unknown }) {
+    const r = this.get(id);
+    this.live(r);
+    const npc = body.npc;
+    if (!isNpc(npc)) throw new GameError(400, 'npc is scout, cryptographer or operator');
+    let target: string;
+    let answer: unknown;
+    const pay = async () => {
+      const c = await this.o.chain.checkHire(r.chainRunId, npc as Npc, body.payment, r.receipts);
+      if (!c.ok) throw new GameError(402, c.error ?? 'payment not found');
+      r.receipts.add(c.receipt);
+      return c.receipt;
+    };
+    let receipt: string;
+    if (npc === 'scout') {
+      if (!isRoom(body.room)) throw new GameError(400, 'scout needs "room": A-D');
+      receipt = await pay();
+      target = body.room;
+      answer = { room: body.room, report: `Room ${body.room} holds ${describe(r.heist.rooms[body.room])}.` };
+    } else if (npc === 'cryptographer') {
+      const lock = body.lock;
+      if ((lock !== 'V' && !isRoom(lock)) || r.heist.codes[lock] === undefined) throw new GameError(400, 'cryptographer needs "lock": a lock that exists (A-D or V)');
+      if (this.hintTier(r, lock) >= 3) throw new GameError(409, `every hint for lock ${lock} is already unlocked`);
+      receipt = await pay();
+      target = lock;
+      r.boughtTier[lock] = this.hintTier(r, lock) + 1;
+      answer = { lock, hints: this.hints(r, lock) };
+    } else {
+      const used = r.log.filter((e) => e.kind === 'hire' && e.npc === 'operator').length;
+      if (used >= MAX_DRY_RUNS) throw new GameError(409, `the operator only does ${MAX_DRY_RUNS} dry runs per heist`);
+      const plan = parsePlan(body.plan);
+      if (typeof plan === 'string') throw new GameError(400, `operator: ${plan}`);
+      receipt = await pay();
+      target = 'plan';
+      const sim = simulate(r.heist, plan);
+      answer = sim.cleared ? { verdict: 'This plan reaches the vault.' } : { verdict: 'This plan fails.', failedAtStep: sim.failedAt, reason: sim.reason };
+    }
+    r.log.push({ t: this.t(r), kind: 'hire', npc, target, receipt, answer });
+    return { npc, receipt, ...(answer as object) };
+  }
+
+  async submit(id: string, plan: unknown) {
+    const r = this.get(id);
+    if (r.verdict) throw new GameError(409, 'this run already submitted its plan');
+    r.log.push({ t: this.t(r), kind: 'plan', plan });
+    r.verdict = replay(r.seed, r.log);
+    const s = await this.o.chain.settle(r.chainRunId, r.verdict.outcome === 'cleared');
+    r.log.push({ t: this.t(r), kind: 'settle', ok: s.ok, detail: s.detail });
+    const transcript = this.transcript(r);
+    if (this.o.dataDir) writeFileSync(join(this.o.dataDir, `${r.id}.json`), JSON.stringify(transcript, null, 2));
+    this.ended.set(r.id, transcript);
+    this.runs.delete(r.id);
+    return transcript;
+  }
+
+  private transcript(r: Run) {
+    const over = r.verdict !== null;
+    return {
+      runId: r.id,
+      player: r.player,
+      chainRunId: r.chainRunId,
+      startedAt: new Date(r.startedAt).toISOString(),
+      status: over ? r.verdict!.outcome : 'active',
+      reason: r.verdict?.reason ?? null,
+      log: r.log,
+      replay: r.verdict?.sim?.trace ?? null,
+      // The heist is revealed only after the run ends. Seed = sha256("<mission secret>:<runId>").
+      heist: over ? { seed: r.seed, rooms: r.heist.rooms, codes: r.heist.codes } : null,
+      commitment: this.commitment,
+    };
+  }
+
+  view(id: string) {
+    const r = this.runs.get(id);
+    if (r) return this.transcript(r);
+    const t = this.ended.get(id);
+    if (!t) throw new GameError(404, `no run ${id}`);
+    return t;
+  }
+
+  list() {
+    const active = [...this.runs.values()].map((r) => ({ runId: r.id, player: r.player, status: 'active', startedAt: new Date(r.startedAt).toISOString() }));
+    const done = [...this.ended.values()].map((t) => {
+      const x = t as { runId: string; player: string | null; status: string; startedAt: string; reason: string };
+      return { runId: x.runId, player: x.player, status: x.status, startedAt: x.startedAt, reason: x.reason };
+    });
+    return [...active, ...done].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  }
+}
+
+function describe(ob: string): string {
+  return ob === 'camera' ? 'a security camera' : ob === 'laser' ? 'a laser grid' : ob === 'shaft' ? 'a shaft' : 'a locked door with a two-digit code';
+}
