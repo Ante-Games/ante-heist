@@ -216,7 +216,11 @@ export class Runs {
     if (r.verdict) throw new GameError(409, 'this run already submitted its plan');
     r.log.push({ t: this.t(r), kind: 'plan', plan });
     r.verdict = replay(r.seed, r.log);
-    const s = await this.o.chain.settle(r.chainRunId, r.verdict.outcome === 'cleared');
+    let s = await this.o.chain.settle(r.chainRunId, r.verdict.outcome === 'cleared');
+    for (let i = 1; !s.ok && i < 3; i++) {
+      await new Promise((res) => setTimeout(res, 1500 * i * this.timeScale));
+      s = await this.o.chain.settle(r.chainRunId, r.verdict.outcome === 'cleared');
+    }
     r.log.push({ t: this.t(r), kind: 'settle', ok: s.ok, detail: s.detail });
     const transcript = this.transcript(r);
     if (this.o.dataDir) writeFileSync(join(this.o.dataDir, `${r.id}.json`), JSON.stringify(transcript, null, 2));
