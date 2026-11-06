@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Runs, GameError, rulesSummary } from './runs.ts';
+import { Runs, GameError } from './runs.ts';
 import { chainFromEnv, type Chain } from './chain.ts';
 
 const PUBLIC = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -31,7 +31,7 @@ async function route(req: IncomingMessage, res: ServerResponse, runs: Runs, chai
     res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8' });
     return res.end(readFileSync(join(PUBLIC, 'skill.md'), 'utf8').replaceAll('{{BASE}}', base));
   }
-  if (m === 'GET' && url.pathname === '/rules') return json(res, 200, { ...rulesSummary(), chain: chain.describe(), commitment: runs.commitment });
+  if (m === 'GET' && url.pathname === '/rules') return json(res, 200, { ...runs.rules(), chain: chain.describe(), commitment: runs.commitment });
   if (m === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true });
 
   if (parts[0] === 'runs') {

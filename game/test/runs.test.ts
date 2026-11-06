@@ -23,6 +23,7 @@ test('a full run: probe, bench, hire, plan, reveal', async () => {
   const p3 = await runs.probe(runId, 'A');
   const p4 = await runs.probe(runId, 'A');
   assert.deepEqual([p1.tier, p2.tier, p3.tier, p4.tier], [1, 2, 3, 3]);
+  assert.deepEqual([p2.startingAlarm, p3.startingAlarm, p4.startingAlarm], [0, 1, 2]);
   assert.equal(p3.clue, heist.clues.A[2]);
 
   // Lock hints unlock at 4, 8, 12 bench attempts.

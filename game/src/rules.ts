@@ -13,23 +13,25 @@ export const OBSTACLES = ['camera', 'laser', 'shaft', 'door'] as const;
 export type Obstacle = (typeof OBSTACLES)[number];
 
 export const GEAR = {
-  jammer: { weight: 3, beats: 'camera' },
-  cutter: { weight: 4, beats: 'laser' },
+  jammer: { weight: 4, beats: 'camera' },
+  cutter: { weight: 5, beats: 'laser' },
   rope: { weight: 3, beats: 'shaft' },
-  drill: { weight: 5, beats: 'door' },
+  drill: { weight: 4, beats: 'door' },
 } as const;
 export type Gear = keyof typeof GEAR;
 export const GEAR_NAMES = Object.keys(GEAR) as Gear[];
 
-export const BAG_CAPACITY = 9;
+export const BAG_CAPACITY = 8;
 export const ALARM_BUDGET = 5;
 export const ALARM_WRONG_CODE = 3;
 export const ALARM_DRILL = 4;
 
 export const RUN_SECONDS = 600;
-export const PROBE_SECONDS = 5;
+export const PROBE_SECONDS = 8;
 export const BENCH_SECONDS = 5;
 export const CLUE_TIERS = 3; // probe 1, 2, 3+ of the same room
+// Loud scouting: every probe of a room past this many adds +1 to the plan's starting alarm.
+export const QUIET_PROBES = 2;
 export const LOCK_HINT_AT = [4, 8, 12] as const; // bench attempts that unlock lock hint tiers 1..3
 export const MAX_DRY_RUNS = 2;
 

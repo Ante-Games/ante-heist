@@ -3,12 +3,12 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   ROOMS, EDGES, GEAR, BAG_CAPACITY, ALARM_BUDGET, ALARM_WRONG_CODE, ALARM_DRILL, RUN_SECONDS,
-  PROBE_SECONDS, BENCH_SECONDS, CLUE_TIERS, LOCK_HINT_AT, MAX_DRY_RUNS, NPC_PRICE_YOCTO, REWARD_YOCTO,
+  PROBE_SECONDS, BENCH_SECONDS, CLUE_TIERS, QUIET_PROBES, LOCK_HINT_AT, MAX_DRY_RUNS, NPC_PRICE_YOCTO, REWARD_YOCTO,
   formatNear, isRoom, isNpc, type Npc, type RoomId,
 } from './rules.ts';
 import { generateHeist, runSeed, sha256Hex, type Heist, type LockId } from './heist.ts';
 import { parsePlan, simulate } from './sim.ts';
-import { replay, type LogEvent, type Verdict } from './checker.ts';
+import { replay, suspicion, type LogEvent, type Verdict } from './checker.ts';
 import type { Chain } from './chain.ts';
 
 export class GameError extends Error {
@@ -43,14 +43,15 @@ export interface RunsOptions {
   dataDir?: string | null;
 }
 
-export function rulesSummary() {
+export function rulesSummary(timeScale = 1) {
   return {
     map: { places: ['Lobby', ...ROOMS, 'Vault'], edges: EDGES },
     gear: GEAR,
     bagCapacity: BAG_CAPACITY,
     alarm: { budget: ALARM_BUDGET, wrongCode: ALARM_WRONG_CODE, drill: ALARM_DRILL },
-    clock: { runSeconds: RUN_SECONDS, probeSeconds: PROBE_SECONDS, benchSeconds: BENCH_SECONDS },
+    clock: { runSeconds: RUN_SECONDS, probeSeconds: PROBE_SECONDS * timeScale, benchSeconds: BENCH_SECONDS * timeScale },
     clueTiers: CLUE_TIERS,
+    loudScouting: `each probe of a room beyond the ${QUIET_PROBES}nd adds +1 to your plan's starting alarm`,
     lockHintsAtAttempts: LOCK_HINT_AT,
     maxDryRuns: MAX_DRY_RUNS,
     reward: `${formatNear(REWARD_YOCTO)} NEAR`,
@@ -87,6 +88,10 @@ export class Runs {
         } catch { /* skip unreadable transcript */ }
       }
     }
+  }
+
+  rules() {
+    return rulesSummary(this.timeScale);
   }
 
   private get(id: string): Run {
@@ -130,7 +135,7 @@ export class Runs {
     r.log.push({ t: 0, kind: 'start', runId: id, player, chainRunId });
     this.runs.set(id, r);
     if (chainRunId) this.chainRuns.set(chainRunId, id);
-    return { runId: id, deadline: new Date(r.startedAt + RUN_SECONDS * 1000).toISOString(), commitment: this.commitment, rules: rulesSummary() };
+    return { runId: id, deadline: new Date(r.startedAt + RUN_SECONDS * 1000).toISOString(), commitment: this.commitment, rules: this.rules() };
   }
 
   async probe(id: string, room: unknown) {
@@ -142,7 +147,7 @@ export class Runs {
     const tier = Math.min(n, CLUE_TIERS);
     const clue = r.heist.clues[room][tier - 1];
     r.log.push({ t: this.t(r), kind: 'probe', room, tier, clue });
-    return { room, tier, clue, probes: n };
+    return { room, tier, clue, probes: n, startingAlarm: suspicion(r.log) };
   }
 
   private hintTier(r: Run, lock: LockId): number {
@@ -204,7 +209,7 @@ export class Runs {
       if (typeof plan === 'string') throw new GameError(400, `operator: ${plan}`);
       receipt = await pay();
       target = 'plan';
-      const sim = simulate(r.heist, plan);
+      const sim = simulate(r.heist, plan, suspicion(r.log));
       answer = sim.cleared ? { verdict: 'This plan reaches the vault.' } : { verdict: 'This plan fails.', failedAtStep: sim.failedAt, reason: sim.reason };
     }
     r.log.push({ t: this.t(r), kind: 'hire', npc, target, receipt, answer });

@@ -1,4 +1,4 @@
-import { RUN_SECONDS, MAX_DRY_RUNS } from './rules.ts';
+import { RUN_SECONDS, MAX_DRY_RUNS, QUIET_PROBES } from './rules.ts';
 import { generateHeist } from './heist.ts';
 import { parsePlan, simulate, type SimResult } from './sim.ts';
 
@@ -28,6 +28,18 @@ export function replay(seed: string, log: LogEvent[]): Verdict {
   if (p.t > RUN_SECONDS * 1000) return { outcome: 'failed', reason: `Plan arrived after the ${RUN_SECONDS}s clock ran out.`, sim: null };
   const plan = parsePlan(p.plan);
   if (typeof plan === 'string') return { outcome: 'failed', reason: `Invalid plan: ${plan}`, sim: null };
-  const sim = simulate(generateHeist(seed), plan);
+  const sim = simulate(generateHeist(seed), plan, suspicion(log));
   return { outcome: sim.cleared ? 'cleared' : 'failed', reason: sim.reason, sim };
+}
+
+// Loud scouting: each probe of a room beyond QUIET_PROBES adds 1 to the plan's starting alarm.
+export function suspicion(log: LogEvent[]): number {
+  const n: Record<string, number> = {};
+  let s = 0;
+  for (const e of log) {
+    if (e.kind !== 'probe') continue;
+    n[e.room] = (n[e.room] ?? 0) + 1;
+    if (n[e.room] > QUIET_PROBES) s++;
+  }
+  return s;
 }

@@ -33,13 +33,13 @@ async function call<T>(base: string, path: string, body?: unknown): Promise<T> {
   }
 }
 
-// Tier-3 clues are plain. Map them back to obstacles.
-function readPlain(clue: string): Obstacle | null {
+// Reads tier-2 and tier-3 images (and the scout NPC's plain report) back into obstacles.
+export function readClear(clue: string): Obstacle | null {
   const c = clue.toLowerCase();
-  if (c.includes('camera')) return 'camera';
-  if (c.includes('laser')) return 'laser';
-  if (c.includes('shaft')) return 'shaft';
-  if (c.includes('door') || c.includes('code')) return 'door';
+  if (/(\bdoor\b|keypad|digits|buttons)/.test(c)) return 'door';
+  if (/(shaft|pit|drop|floor stops|bolts|line from above|swing)/.test(c)) return 'shaft';
+  if (/(laser|threads|beams|lines of light|pulled tight)/.test(c)) return 'laser';
+  if (/(camera|red light turns|glass|watches|lens|dome)/.test(c)) return 'camera';
   return null;
 }
 
@@ -82,7 +82,7 @@ export async function playScripted(o: LeadOptions): Promise<{ runId: string; tra
   await Promise.all(ROOMS.map(async (room: RoomId) => {
     if (o.style === 'hire') {
       const r = await p('hire', { npc: 'scout', room, payment: await o.pay!('scout') });
-      k.rooms[room] = readPlain(String(r.report))!;
+      k.rooms[room] = readClear(String(r.report))!;
       log(`  hired scout: ${r.report}`);
       return;
     }
@@ -92,10 +92,11 @@ export async function playScripted(o: LeadOptions): Promise<{ runId: string; tra
       log(`  probe ${room}: "${r.clue}" → guessed ${k.rooms[room]}`);
       return;
     }
+    // Probe twice (quiet), decode the tier-2 image; only probe a third time (loud) if unsure.
     for (;;) {
       const r = await p('probe', { room });
-      log(`  probe ${room} (tier ${r.tier}): "${r.clue}"`);
-      const ob = Number(r.tier) === 3 ? readPlain(String(r.clue)) : null;
+      log(`  probe ${room} (tier ${r.tier}): "${r.clue}"${Number(r.startingAlarm) > 0 ? ` [starting alarm ${r.startingAlarm}]` : ''}`);
+      const ob = Number(r.tier) >= 2 ? readClear(String(r.clue)) : null;
       if (ob) { k.rooms[room] = ob; return; }
     }
   }));

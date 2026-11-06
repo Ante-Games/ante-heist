@@ -80,7 +80,7 @@ function lockFor(h: Heist, target: Place): LockId | null {
 }
 
 // Pure: same heist and plan always give the same result.
-export function simulate(h: Heist, plan: Plan): SimResult {
+export function simulate(h: Heist, plan: Plan, startAlarm = 0): SimResult {
   const trace: TraceLine[] = [];
   const weight = plan.bag.reduce((w, g) => w + GEAR[g].weight, 0);
   const fail = (i: number, at: Place, alarm: number, reason: string, step?: Step): SimResult => {
@@ -88,10 +88,12 @@ export function simulate(h: Heist, plan: Plan): SimResult {
     return { cleared: false, reason, failedAt: i, alarm, trace };
   };
   if (weight > BAG_CAPACITY) return fail(-1, 'Lobby', 0, `Bag weighs ${weight}/${BAG_CAPACITY}. Plan rejected before entry.`);
-  trace.push({ i: -1, at: 'Lobby', alarm: 0, note: `Bag packed: ${plan.bag.join(', ') || 'empty'} (${weight}/${BAG_CAPACITY}).` });
+  if (startAlarm > ALARM_BUDGET) return fail(-1, 'Lobby', startAlarm, `Scouting was too loud: the alarm starts at ${startAlarm}/${ALARM_BUDGET}.`);
+  const loud = startAlarm > 0 ? ` Loud scouting: alarm starts at ${startAlarm}/${ALARM_BUDGET}.` : '';
+  trace.push({ i: -1, at: 'Lobby', alarm: startAlarm, note: `Bag packed: ${plan.bag.join(', ') || 'empty'} (${weight}/${BAG_CAPACITY}).${loud}` });
 
   let at: Place = 'Lobby';
-  let alarm = 0;
+  let alarm = startAlarm;
   let prepared: Gear | null = null; // gear used on the immediately preceding step
   const open = new Set<LockId>();
   const lastWrong = new Map<LockId, number>();

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ROOMS, OBSTACLES, CLUE_TIERS, type Obstacle, type RoomId } from './rules.ts';
 import { ROOM_CLUES, parityHint, digitSumHint, lastDigitHint } from './content.ts';
+import { routes, planRoute, locksOnRoute } from './solver.ts';
 
 export type LockId = RoomId | 'V';
 
@@ -46,7 +47,7 @@ export function generateHeist(seed: string): Heist {
   let rooms: Record<RoomId, Obstacle>;
   do {
     rooms = { A: pick(OBSTACLES), B: pick(OBSTACLES), C: pick(OBSTACLES), D: pick(OBSTACLES) };
-  } while (sameMix([rooms.A, rooms.C], [rooms.B, rooms.D]) || ROOMS.every((r) => rooms[r] === 'door'));
+  } while (sameMix([rooms.A, rooms.C], [rooms.B, rooms.D]) || !interesting(rooms));
 
   const codes: Partial<Record<LockId, number>> = { V: next() % 100 };
   for (const r of ROOMS) if (rooms[r] === 'door') codes[r] = next() % 100;
@@ -63,6 +64,15 @@ export function generateHeist(seed: string): Heist {
   }
 
   return { seed, rooms, codes, clues, lockHints };
+}
+
+// Deal only buildings with tension: some route fits in the bag, and every route that fits
+// needs at least two codes (the vault plus a door), so cracking, the drill and the alarm matter.
+function interesting(rooms: Record<RoomId, Obstacle>): boolean {
+  const codes: Partial<Record<LockId, number>> = { V: 0 };
+  for (const r of ROOMS) if (rooms[r] === 'door') codes[r] = 0;
+  const fitting = routes().filter((route) => planRoute(route, { rooms, codes }) !== null);
+  return fitting.length > 0 && fitting.every((route) => locksOnRoute(route, rooms).length >= 2);
 }
 
 function sameMix(a: Obstacle[], b: Obstacle[]): boolean {

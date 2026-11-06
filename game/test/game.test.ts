@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { generateHeist, runSeed, locksOf, type Heist } from '../src/heist.ts';
 import { simulate, parsePlan, type Plan } from '../src/sim.ts';
 import { solve, routes } from '../src/solver.ts';
-import { replay, type LogEvent } from '../src/checker.ts';
+import { replay, suspicion, type LogEvent } from '../src/checker.ts';
+import { planRoute, locksOnRoute } from '../src/solver.ts';
 import { ROOMS, RUN_SECONDS } from '../src/rules.ts';
 
 const seeds = Array.from({ length: 500 }, (_, i) => runSeed('test-secret', `run-${i}`));
@@ -55,10 +56,10 @@ test('the two short routes always differ in obstacle mix', () => {
   assert.equal(routes().length, 4);
 });
 
-// A fixed heist for failure cases: A camera, C shaft, B door, D laser.
+// A fixed heist for failure cases: A camera, C shaft, B door, D camera.
 const fixed: Heist = {
   seed: 'fixed',
-  rooms: { A: 'camera', B: 'door', C: 'shaft', D: 'laser' },
+  rooms: { A: 'camera', B: 'door', C: 'shaft', D: 'camera' },
   codes: { B: 37, V: 64 },
   clues: { A: [], B: [], C: [], D: [] },
   lockHints: {},
@@ -74,7 +75,7 @@ test('a correct plan clears', () => {
 test('overweight bag is rejected before entry', () => {
   const r = simulate(fixed, { bag: ['cutter', 'drill', 'rope'], steps: [{ move: 'A' }] });
   assert.equal(r.failedAt, -1);
-  assert.match(r.reason, /12\/9/);
+  assert.match(r.reason, /12\/8/);
 });
 
 test('missing or unready gear fails with a readable reason', () => {
@@ -95,11 +96,11 @@ test('wrong codes raise the alarm; one is survivable, two are not', () => {
 });
 
 test('drill opens a lock once; a second drill trips the alarm', () => {
-  const plan: Plan = { bag: ['cutter', 'drill'], steps: [{ drill: 'B' }, { move: 'B' }, { use: 'cutter' }, { move: 'D' }, { drill: 'V' }] };
+  const plan: Plan = { bag: ['jammer', 'drill'], steps: [{ drill: 'B' }, { move: 'B' }, { use: 'jammer' }, { move: 'D' }, { drill: 'V' }] };
   const r = simulate(fixed, plan);
   assert.equal(r.failedAt, 4);
   assert.match(r.reason, /8\/5/);
-  const ok = simulate(fixed, { bag: ['cutter', 'drill'], steps: [{ drill: 'B' }, { move: 'B' }, { use: 'cutter' }, { move: 'D' }, { enter: 'V', code: 64 }, { move: 'Vault' }] });
+  const ok = simulate(fixed, { bag: ['jammer', 'drill'], steps: [{ drill: 'B' }, { move: 'B' }, { use: 'jammer' }, { move: 'D' }, { enter: 'V', code: 64 }, { move: 'Vault' }] });
   assert.ok(ok.cleared, ok.reason);
 });
 
@@ -127,4 +128,33 @@ test('replay is deterministic and enforces one plan inside the clock', () => {
   assert.match(replay(seed, [{ ...log[1], t: RUN_SECONDS * 1000 + 1 }]).reason, /clock ran out/);
   assert.match(replay(seed, [log[1], log[1]]).reason, /exactly one plan/);
   assert.equal(replay(seeds[8], log).outcome === 'cleared', simulate(generateHeist(seeds[8]), plan).cleared);
+});
+
+test('every route that fits the bag needs at least two codes', () => {
+  for (const s of seeds) {
+    const h = generateHeist(s);
+    const fits = routes().filter((r) => planRoute(r, { rooms: h.rooms, codes: h.codes }) !== null);
+    assert.ok(fits.length > 0);
+    for (const r of fits) assert.ok(locksOnRoute(r, h.rooms).length >= 2, `${s}: ${r.join('>')}`);
+  }
+});
+
+test('loud scouting: probes past the second on a room raise the starting alarm', () => {
+  const probe = (room: string): LogEvent => ({ t: 1, kind: 'probe', room, tier: 1, clue: '' });
+  assert.equal(suspicion([probe('A'), probe('A')]), 0);
+  assert.equal(suspicion([probe('A'), probe('A'), probe('A'), probe('B'), probe('A')]), 2);
+  const withWrong: Plan = { ...good, steps: [...good.steps.slice(0, 4), { enter: 'V', code: 1 }, ...good.steps.slice(4)] };
+  assert.ok(simulate(fixed, withWrong, 2).cleared, 'alarm 2 + 3 = 5 is still inside the budget');
+  const r = simulate(fixed, withWrong, 3);
+  assert.ok(!r.cleared);
+  assert.match(r.reason, /6\/5/);
+  assert.match(simulate(fixed, good, 6).reason, /too loud/);
+});
+
+test('the scripted lead decodes every tier-2 and tier-3 clue in the bank', async () => {
+  const { ROOM_CLUES } = await import('../src/content.ts');
+  const { readClear } = await import('../lead/scripted.ts');
+  for (const [ob, tiers] of Object.entries(ROOM_CLUES)) {
+    for (const clue of [...tiers[1], ...tiers[2]]) assert.equal(readClear(clue), ob, clue);
+  }
 });

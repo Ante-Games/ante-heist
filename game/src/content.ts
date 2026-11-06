@@ -14,7 +14,10 @@ export const ROOM_CLUES: Record<Obstacle, [string[], string[], string[]]> = {
       'Glass glints near the ceiling and follows your shadow.',
       'Whatever watches here can be blinded, but not cut.',
     ],
-    ['Plainly: a security camera covers this room.'],
+    [
+      'A lens on a slow swivel tracks the doorway; blind it and walk through.',
+      'A dome of dark glass on the ceiling turns to follow movement.',
+    ],
   ],
   laser: [
     [
@@ -27,7 +30,10 @@ export const ROOM_CLUES: Record<Obstacle, [string[], string[], string[]]> = {
       'Fine beams stitch the doorway shut; something sharp would unthread them.',
       'Light is pulled tight across this room like wire.',
     ],
-    ['Plainly: a laser grid crosses this room.'],
+    [
+      'Red lines of light crisscross the floor at waist height; break one and the room screams.',
+      'A lattice of beams fills the room; it can be cut, not walked through.',
+    ],
   ],
   shaft: [
     [
@@ -40,7 +46,10 @@ export const ROOM_CLUES: Record<Obstacle, [string[], string[], string[]]> = {
       'Bolts in the ceiling once held something to swing across on.',
       'Only a line from above gets anyone over this gap.',
     ],
-    ['Plainly: a shaft splits this room.'],
+    [
+      'The floor ends at a deep pit; hooks above could take a line across.',
+      'A drop of several floors cuts the room in two; you would have to swing over it.',
+    ],
   ],
   door: [
     [
@@ -53,7 +62,10 @@ export const ROOM_CLUES: Record<Obstacle, [string[], string[], string[]]> = {
       'Two-digit buttons are worn smooth beside a steel door.',
       'Patience or noise will open the door ahead.',
     ],
-    ['Plainly: a locked door with a two-digit code (0-99).'],
+    [
+      'A steel door with a two-digit keypad; the right number, or a lot of noise, opens it.',
+      'A vault-grade door, keypad glowing 0 to 99.',
+    ],
   ],
 };
 
