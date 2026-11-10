@@ -152,7 +152,7 @@ export function chainFromEnv(env: NodeJS.ProcessEnv): Chain {
   const contract = env.HEIST_CONTRACT_ID;
   if (!contract) throw new Error('HEIST_CHAIN=testnet needs HEIST_CONTRACT_ID');
   return new TestnetChain(
-    env.NEAR_RPC_URL ?? 'https://rpc.testnet.near.org',
+    env.NEAR_RPC_URL ?? 'https://test.rpc.fastnear.com',
     contract,
     env.HEIST_MISSION_ID ?? 'mission-1',
     env.SETTLER_ACCOUNT_ID ?? null,

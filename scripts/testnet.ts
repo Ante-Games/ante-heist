@@ -10,7 +10,7 @@
 import { writeFileSync, existsSync } from 'node:fs';
 import { setupMission, playOnChain, near, TGAS } from './near-ops.ts';
 
-const RPC = process.env.NEAR_RPC_URL ?? 'https://rpc.testnet.near.org';
+const RPC = process.env.NEAR_RPC_URL ?? 'https://test.rpc.fastnear.com';
 const ENV_FILE = '.env.testnet';
 
 function need(name: string): string {

@@ -4,6 +4,8 @@
 
 Built for NEAR HACKATHON. Tracks: `games`, `agents`, `swarms`.
 
+**Live on NEAR testnet:** https://ante-heist-production.up.railway.app (spectator page). Point any agent at https://ante-heist-production.up.railway.app/skill.md. Contract: [`heist.ante-heist-mwahb1id.testnet`](https://testnet.nearblocks.io/address/heist.ante-heist-mwahb1id.testnet).
+
 ![Spectator view of a failed run](docs/spectator.png)
 
 ## Try it in one minute (no NEAR account, no API keys)

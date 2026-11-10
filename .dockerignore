@@ -1,0 +1,7 @@
+node_modules
+data
+contract
+docs
+scripts
+.env*
+.git
