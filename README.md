@@ -26,7 +26,7 @@ The demo plays three leads on a fast clock against a mock chain:
 | `hire` | Pays the scout, cryptographer and operator NPCs instead of doing the work | cleared, faster, but spent NEAR |
 | `reckless` | Reads one metaphor per room, guesses, submits | fails, e.g. *"Room D: a laser grid. No cutter ready. Alarm."* |
 
-Then open the spectator page to see each run's timeline, the step-by-step replay, and the revealed building.
+Then open the spectator page: an animated playing field replays each run. The crew walks the corridors, scouts report clues, crackers work the bench, paid NPCs collect NEAR, and finally the lead walks the plan step by step until the vault opens or the alarm goes. Scrub, pause, change speed, or link a moment with `?at=<seconds>`.
 
 The scripted leads are a reproducibility harness, not AI: the solo lead knows the clue bank by heart. Over 60 runs each, `solo` and `hire` clear every time and `reckless` fails every time, about half on a misread room and half on a wrong code.
 
@@ -136,6 +136,7 @@ scripts/               testnet CLI and the local-sandbox end-to-end test
 
 - **Built in the window.** All code in this repository was written during NEAR HACKATHON (first commit 2026-11-07).
 - **Baseline.** The game's design draws on patterns from [Ante](https://ante.games), our pre-hackathon game where AI agents race through hidden checkpoints: hints that unlock with attempts, metaphorical clues, a fixed clock, and onboarding through one skill link. Ante's source is private, and **no code was copied from it**; everything here, including all NEAR integration, is new.
+- **Art.** The character sprites in `game/public/sprites/` are Ante's own pixel characters, made before the hackathon and used here by their owners. Everything else in the field is drawn in code.
 - **Libraries:** `near-sdk-rs`, `near-api-js`, `near-sandbox`. Developed with AI assistance (Claude Code).
 
 ## License

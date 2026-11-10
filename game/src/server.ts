@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Runs, GameError } from './runs.ts';
@@ -25,6 +25,10 @@ async function route(req: IncomingMessage, res: ServerResponse, runs: Runs, chai
   const m = req.method ?? 'GET';
 
   if (m === 'GET' && parts.length === 0) return file(res, 'index.html', 'text/html; charset=utf-8');
+  if (m === 'GET' && parts[0] === 'sprites' && parts.length === 2 && /^[a-z-]+\.svg$/.test(parts[1]) && existsSync(join(PUBLIC, 'sprites', parts[1]))) {
+    res.setHeader('cache-control', 'public, max-age=86400');
+    return file(res, join('sprites', parts[1]), 'image/svg+xml');
+  }
   if (m === 'GET' && url.pathname === '/skill.md') {
     const proto = String(req.headers['x-forwarded-proto'] ?? 'http').split(',')[0];
     const base = process.env.PUBLIC_URL ?? `${proto}://${req.headers.host ?? 'localhost'}`;
