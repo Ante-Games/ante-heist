@@ -2,6 +2,7 @@
 // server in testnet mode against it, and plays leads that pay NPCs and get paid on chain.
 //   npm run e2e
 import assert from 'node:assert/strict';
+import { NPC_PRICE_YOCTO } from '../game/src/rules.ts';
 import { Sandbox, DEFAULT_PRIVATE_KEY } from 'near-sandbox';
 import { setupMission, playOnChain, near } from './near-ops.ts';
 import { Runs } from '../game/src/runs.ts';
@@ -14,7 +15,7 @@ const server = { close: () => {} } as { close: () => void };
 try {
   const rpcUrl = sandbox.rpcUrl;
   console.log(`sandbox at ${rpcUrl}`);
-  const env = await setupMission({ rpcUrl, ownerId: 'sandbox', ownerKey: DEFAULT_PRIVATE_KEY, potNear: '3', playerNear: '3' });
+  const env = await setupMission({ rpcUrl, ownerId: 'sandbox', ownerKey: DEFAULT_PRIVATE_KEY, potNear: '3', playerNear: '5' });
   const n = near(rpcUrl);
 
   const chain = new TestnetChain(rpcUrl, env.HEIST_CONTRACT_ID, env.HEIST_MISSION_ID, env.SETTLER_ACCOUNT_ID, env.SETTLER_PRIVATE_KEY);
@@ -40,17 +41,20 @@ try {
 
   const npcAfter = await Promise.all(['scout', 'cryptographer', 'operator'].map((p) => n.balance(`${p}.sandbox`)));
   const gained = npcAfter.map((b, i) => b - npcBefore[i]);
-  assert.equal(gained[0], 4n * 10n ** 23n, 'scout paid 4 x 0.1');
-  assert.ok(gained[1] >= 2n * 10n ** 23n, 'cryptographer paid');
-  assert.equal(gained[2], 2n * 10n ** 23n, 'operator paid 0.2');
+  const P = NPC_PRICE_YOCTO;
+  assert.equal(gained[0], 4n * P.scout, 'scout paid for 4 rooms');
+  assert.equal(gained[1] % P.cryptographer, 0n, 'cryptographer paid whole hires');
+  assert.equal(gained[2], P.operator, 'operator paid for one dry run');
+  const tx = hire.transcript.settlement;
+  assert.ok(tx?.tx && tx.explorer?.includes(tx.tx), 'settlement tx hash and explorer link recorded');
 
   // 2. A hire can't be spent twice, and a chain run can't be reused for a second heist.
   await assert.rejects(fetch(`${base}/runs`, { method: 'POST', body: JSON.stringify({ player: env.PLAYER_ACCOUNT_ID, chainRunId: String(hire.runId) }) })
     .then(async (r) => { if (!r.ok) throw new Error(String(r.status)); }));
 
-  // 3. A solo lead clears without hiring; a reckless lead usually fails and earns nothing.
+  // 3. A solo lead plays without hiring and a reckless lead guesses; the chain matches the server either way.
   const solo = await play('solo');
-  assert.equal(solo.run.outcome, 'Cleared');
+  assert.equal(solo.run.outcome, solo.transcript.status === 'cleared' ? 'Cleared' : 'Failed');
   const reckless = await play('reckless');
   assert.equal(reckless.run.outcome, reckless.transcript.status === 'cleared' ? 'Cleared' : 'Failed');
 

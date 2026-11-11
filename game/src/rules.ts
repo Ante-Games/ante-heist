@@ -26,23 +26,23 @@ export const ALARM_BUDGET = 5;
 export const ALARM_WRONG_CODE = 3;
 export const ALARM_DRILL = 4;
 
-export const RUN_SECONDS = 600;
+export const RUN_SECONDS = 300;
 export const PROBE_SECONDS = 8;
 export const BENCH_SECONDS = 5;
 export const CLUE_TIERS = 3; // probe 1, 2, 3+ of the same room
 // Loud scouting: every probe of a room past this many adds +1 to the plan's starting alarm.
 export const QUIET_PROBES = 2;
-export const LOCK_HINT_AT = [3, 6] as const; // bench attempts that unlock free hint tiers 1-2; tier 3 is sold by the cryptographer
-export const BENCH_MAX = 8; // bench tests per lock: no brute force over 0-99
+export const LOCK_HINT_AT = [2, 4] as const; // bench attempts that unlock free hint tiers 1-2; tier 3 is sold by the cryptographer
+export const BENCH_MAX = 5; // bench tests per lock: no brute force over 0-99
 export const MAX_DRY_RUNS = 2;
 
 export const NPCS = ['scout', 'cryptographer', 'operator'] as const;
 export type Npc = (typeof NPCS)[number];
 // Prices in yoctoNEAR (1 NEAR = 10^24). Mirrored by the contract's defaults.
 export const NPC_PRICE_YOCTO: Record<Npc, bigint> = {
-  scout: 10n ** 23n, // 0.1 NEAR
-  cryptographer: 10n ** 23n, // 0.1 NEAR
-  operator: 2n * 10n ** 23n, // 0.2 NEAR
+  scout: 2n * 10n ** 23n, // 0.2 NEAR
+  cryptographer: 3n * 10n ** 23n, // 0.3 NEAR
+  operator: 3n * 10n ** 23n, // 0.3 NEAR
 };
 export const REWARD_YOCTO = 10n ** 24n; // 1 NEAR
 
@@ -65,6 +65,12 @@ export function isGear(x: unknown): x is Gear {
 
 export function isNpc(x: unknown): x is Npc {
   return typeof x === 'string' && (NPCS as readonly string[]).includes(x);
+}
+
+// NPC names are lowercase everywhere; "Scout" is accepted too.
+export function asNpc(x: unknown): Npc | null {
+  const n = typeof x === 'string' ? x.toLowerCase() : x;
+  return isNpc(n) ? n : null;
 }
 
 export function formatNear(yocto: bigint): string {

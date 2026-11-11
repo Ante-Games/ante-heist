@@ -1,7 +1,7 @@
 // A scripted lead: plays a heist over the HTTP API with no model and no API keys.
 // It exists so judges can reproduce a full run with one command. A real agent plays the
 // same API from /skill.md.
-import { OBSTACLES, ROOMS, GEAR, BAG_CAPACITY, BENCH_MAX, type Obstacle, type RoomId } from '../src/rules.ts';
+import { OBSTACLES, ROOMS, GEAR, BAG_CAPACITY, BENCH_MAX, LOCK_HINT_AT, type Obstacle, type RoomId } from '../src/rules.ts';
 import { ROOM_CLUES } from '../src/content.ts';
 import { routes, planRoute, locksOnRoute, type Knowledge } from '../src/solver.ts';
 import type { LockId } from '../src/heist.ts';
@@ -127,14 +127,15 @@ export async function playScripted(o: LeadOptions): Promise<{ runId: string; tra
   await Promise.all(choice.locks.map(async (lock: LockId) => {
     const wrong = new Set<number>();
     let hints: string[] = [];
-    if (o.style === 'hire') {
-      for (let i = 0; i < 2; i++) {
+    let bought = false;
+    for (;;) {
+      // The hiring lead uses the free bench hints first, then buys the third hint only if the code is still open.
+      if (o.style === 'hire' && !bought && wrong.size >= LOCK_HINT_AT[1] && candidates(hints, wrong).length > 1) {
         const r = await p('hire', { npc: 'cryptographer', lock, payment: await o.pay!('cryptographer') });
         hints = r.hints as string[];
+        bought = true;
+        log(`  hired cryptographer for ${lock}: ${hints.at(-1)}`);
       }
-      log(`  hired cryptographer for ${lock}: ${hints.join(' / ')}`);
-    }
-    for (;;) {
       const xs = candidates(hints, wrong);
       const guess = o.style === 'reckless' ? xs[Math.floor(xs.length / 2)] : xs[0];
       const r = await p('bench', { lock, guess });

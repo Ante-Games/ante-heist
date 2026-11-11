@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import {
   ROOMS, EDGES, GEAR, BAG_CAPACITY, ALARM_BUDGET, ALARM_WRONG_CODE, ALARM_DRILL, RUN_SECONDS,
   PROBE_SECONDS, BENCH_SECONDS, CLUE_TIERS, QUIET_PROBES, LOCK_HINT_AT, BENCH_MAX, MAX_DRY_RUNS, NPC_PRICE_YOCTO, REWARD_YOCTO,
-  formatNear, isRoom, isNpc, type Npc, type RoomId,
+  formatNear, isRoom, asNpc, type Npc, type RoomId,
 } from './rules.ts';
 import { generateHeist, runSeed, sha256Hex, type Heist, type LockId } from './heist.ts';
 import { parsePlan, simulate } from './sim.ts';
@@ -182,8 +182,8 @@ export class Runs {
   async hire(id: string, body: { npc?: unknown; room?: unknown; lock?: unknown; plan?: unknown; payment?: unknown }) {
     const r = this.get(id);
     this.live(r);
-    const npc = body.npc;
-    if (!isNpc(npc)) throw new GameError(400, 'npc is scout, cryptographer or operator');
+    const npc = asNpc(body.npc);
+    if (!npc) throw new GameError(400, 'npc is scout, cryptographer or operator');
     let target: string;
     let answer: unknown;
     const pay = async () => {
@@ -234,12 +234,12 @@ export class Runs {
       await new Promise((res) => setTimeout(res, 1500 * i * this.timeScale));
       s = await this.o.chain.settle(r.chainRunId, r.verdict.outcome === 'cleared');
     }
-    r.log.push({ t: this.t(r), kind: 'settle', ok: s.ok, detail: s.detail });
+    r.log.push({ t: this.t(r), kind: 'settle', ok: s.ok, detail: s.detail, ...(s.tx ? { tx: s.tx, explorer: s.explorer } : {}) });
     const transcript = this.transcript(r);
     if (this.o.dataDir) writeFileSync(join(this.o.dataDir, `${r.id}.json`), JSON.stringify(transcript, null, 2));
     this.ended.set(r.id, transcript);
     this.runs.delete(r.id);
-    return { runId: r.id, status: transcript.status, reason: transcript.reason, replay: transcript.replay, heist: transcript.heist, settlement: s.detail, transcript: `/runs/${r.id}` };
+    return { runId: r.id, status: transcript.status, reason: transcript.reason, replay: transcript.replay, heist: transcript.heist, settlement: transcript.settlement, transcript: `/runs/${r.id}` };
   }
 
   private transcript(r: Run) {
@@ -255,6 +255,7 @@ export class Runs {
       replay: r.verdict?.sim?.trace ?? null,
       // The heist is revealed only after the run ends. Seed = sha256("<mission secret>:<runId>").
       heist: over ? { seed: r.seed, rooms: r.heist.rooms, codes: r.heist.codes } : null,
+      settlement: settlementOf(r.log),
       commitment: this.commitment,
     };
   }
@@ -275,6 +276,13 @@ export class Runs {
     });
     return [...active, ...done].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   }
+}
+
+// The on-chain proof of the payout: the settle_run transaction and its explorer link.
+function settlementOf(log: LogEvent[]) {
+  const s = [...log].reverse().find((e) => e.kind === 'settle');
+  if (!s || s.kind !== 'settle') return null;
+  return { ok: s.ok, detail: s.detail, tx: s.tx ?? null, explorer: s.explorer ?? null };
 }
 
 function describe(ob: string): string {

@@ -34,13 +34,14 @@ if (cmd === 'setup') {
     contractId: need('HEIST_CONTRACT_ID'), missionId: need('HEIST_MISSION_ID'), playerId: need('PLAYER_ACCOUNT_ID'), playerKey: need('PLAYER_PRIVATE_KEY'), style,
   });
   console.log(r.transcript.log.filter((e) => e.kind === 'settle').map((e) => e.detail).join('\n'));
+  if (r.transcript.settlement?.explorer) console.log(`settlement tx: ${r.transcript.settlement.explorer}`);
   console.log(`on chain run ${r.runId}: ${JSON.stringify(r.run)}`);
 } else if (cmd === 'status') {
   const n = near(RPC);
   const c = need('HEIST_CONTRACT_ID');
   console.log('mission', JSON.stringify(await n.view(c, 'get_mission', { mission_id: need('HEIST_MISSION_ID') }), null, 2));
   console.log('runs', await n.view(c, 'run_count'));
-  for (const npc of ['Scout', 'Cryptographer', 'Operator']) console.log(npc, JSON.stringify(await n.view(c, 'get_npc', { npc })));
+  for (const npc of ['scout', 'cryptographer', 'operator']) console.log(npc, JSON.stringify(await n.view(c, 'get_npc', { npc })));
 } else if (cmd === 'reveal') {
   const n = near(RPC);
   const settler = n.account(need('SETTLER_ACCOUNT_ID'), need('SETTLER_PRIVATE_KEY'));

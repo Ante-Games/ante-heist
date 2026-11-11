@@ -13,11 +13,16 @@ use near_sdk::{env, near, require, AccountId, NearToken, PanicOnDefault, Promise
 
 pub const STORAGE_BOND: NearToken = NearToken::from_millinear(10); // 0.01 NEAR, returned at settlement
 
+// JSON names are lowercase, matching the game server ("scout"); the capitalised names are still accepted.
 #[near(serializers = [json, borsh])]
+#[serde(rename_all = "lowercase")]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Npc {
+    #[serde(alias = "Scout")]
     Scout,
+    #[serde(alias = "Cryptographer")]
     Cryptographer,
+    #[serde(alias = "Operator")]
     Operator,
 }
 
@@ -84,9 +89,9 @@ impl Contract {
         Self {
             owner,
             settler,
-            scout: NpcInfo { account: scout, price: NearToken::from_millinear(100) },
-            cryptographer: NpcInfo { account: cryptographer, price: NearToken::from_millinear(100) },
-            operator: NpcInfo { account: operator, price: NearToken::from_millinear(200) },
+            scout: NpcInfo { account: scout, price: NearToken::from_millinear(200) },
+            cryptographer: NpcInfo { account: cryptographer, price: NearToken::from_millinear(300) },
+            operator: NpcInfo { account: operator, price: NearToken::from_millinear(300) },
             missions: IterableMap::new(b"m"),
             runs: Vector::new(b"r"),
         }
@@ -303,14 +308,14 @@ mod tests {
         let mut c = setup();
         let id = start(&mut c, "lead.testnet");
         assert_eq!(id, 0);
-        ctx("lead.testnet", NearToken::from_millinear(150));
+        ctx("lead.testnet", NearToken::from_millinear(250));
         assert_eq!(c.hire(id, Npc::Scout), 0);
-        ctx("lead.testnet", NearToken::from_millinear(200));
+        ctx("lead.testnet", NearToken::from_millinear(300));
         assert_eq!(c.hire(id, Npc::Operator), 1);
         let run = c.get_run(id).unwrap();
         assert_eq!(run.hires.len(), 2);
         assert_eq!(run.hires[0].npc, Npc::Scout);
-        assert_eq!(run.hires[0].paid, NearToken::from_millinear(100));
+        assert_eq!(run.hires[0].paid, NearToken::from_millinear(200));
 
         ctx("settler.testnet", NearToken::from_yoctonear(0));
         c.settle_run(id, true);
@@ -320,6 +325,14 @@ mod tests {
         let m = c.get_mission("m1".into()).unwrap();
         assert_eq!(m.pot, NearToken::from_near(2));
         assert_eq!((m.runs, m.clears), (1, 1));
+    }
+
+    #[test]
+    fn npc_names_are_lowercase_in_json_and_accept_capitalised() {
+        assert_eq!(near_sdk::serde_json::to_string(&Npc::Cryptographer).unwrap(), "\"cryptographer\"");
+        let a: Npc = near_sdk::serde_json::from_str("\"scout\"").unwrap();
+        let b: Npc = near_sdk::serde_json::from_str("\"Scout\"").unwrap();
+        assert_eq!((a, b), (Npc::Scout, Npc::Scout));
     }
 
     #[test]
@@ -346,7 +359,7 @@ mod tests {
     fn hire_needs_the_price() {
         let mut c = setup();
         let id = start(&mut c, "lead.testnet");
-        ctx("lead.testnet", NearToken::from_millinear(199));
+        ctx("lead.testnet", NearToken::from_millinear(299));
         c.hire(id, Npc::Operator);
     }
 

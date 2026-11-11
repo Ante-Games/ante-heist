@@ -9,7 +9,7 @@ export type LogEvent =
   | { t: number; kind: 'bench'; lock: string; guess: number; open: boolean; hint: string | null }
   | { t: number; kind: 'hire'; npc: string; target: string; receipt: string; answer: unknown }
   | { t: number; kind: 'plan'; plan: unknown }
-  | { t: number; kind: 'settle'; ok: boolean; detail: string };
+  | { t: number; kind: 'settle'; ok: boolean; detail: string; tx?: string; explorer?: string };
 
 export interface Verdict {
   outcome: 'cleared' | 'failed';

@@ -88,6 +88,8 @@
   .flash.alarm { background: radial-gradient(circle, rgba(239,75,75,0) 30%, rgba(239,75,75,.35) 100%); }
   .flash.win { background: radial-gradient(circle at 88% 50%, rgba(127,209,139,.35), rgba(127,209,139,0) 45%); }
   .banner { position: absolute; left: 50%; bottom: 4%; transform: translateX(-50%); font: 700 clamp(11px, 1.4vw, 16px)/1.3 'DM Sans', sans-serif; padding: 7px 14px; border-radius: 6px; z-index: 6; text-align: center; max-width: 80%; pointer-events: none; opacity: 0; }
+  .banner a { color: inherit; pointer-events: auto; }
+  .verdict a { color: var(--near); }
   .banner.failed { background: #2a0f0c; color: #ffb4a8; border: 1px solid #6b241c; }
   .banner.cleared { background: #0f2413; color: #b9f0c0; border: 1px solid #285c30; }
   .controls { display: flex; gap: 10px; align-items: center; padding: 10px 2px 2px; font: 500 12px var(--mono); color: var(--muted); }
@@ -140,6 +142,8 @@ const OB = { camera: 'camera', laser: 'laser grid', shaft: 'shaft', door: 'locke
 const GEAR_FOR = { camera: 'jammer', laser: 'cutter', shaft: 'rope' };
 const PRICE = { scout: 0.1, cryptographer: 0.1, operator: 0.2 };
 let selected = location.hash.slice(1) || null;
+let runSeconds = 300;
+fetch('/rules').then((r) => r.json()).then((r) => { runSeconds = r.clock?.runSeconds ?? runSeconds; }).catch(() => {});
 let timer = null;
 
 async function getJSON(u) { const r = await fetch(u); if (!r.ok) throw new Error(r.status); return r.json(); }
@@ -486,12 +490,16 @@ function drawField() {
   const banner = $('#banner', field.el);
   banner.className = 'banner ' + (S.banner || '');
   banner.style.opacity = S.banner ? 1 : 0;
-  if (S.banner) banner.innerHTML = S.banner === 'cleared' ? `Cleared: reached the vault.${t.settlement ? '' : ''}${tl.settle ? `<br><small>${esc(tl.settle.detail)}</small>` : ''}` : `Failed: ${esc(t.reason)}${tl.settle ? `<br><small>${esc(tl.settle.detail)}</small>` : ''}`;
+  if (S.banner) {
+    const st = tl.settle ? `<br><small>${esc(tl.settle.detail)}${tl.settle.explorer ? ` · <a href="${esc(tl.settle.explorer)}" target="_blank" rel="noopener">view transaction ↗</a>` : ''}</small>` : '';
+    const html = (S.banner === 'cleared' ? 'Cleared: reached the vault.' : `Failed: ${esc(t.reason)}`) + st;
+    if (banner.innerHTML !== html) banner.innerHTML = html;
+  }
   // HUD.
   const inPlan = tl.plan && field.tau >= tl.plan.t;
   $('#hud-phase', field.el).textContent = inPlan ? (S.banner ? S.banner.toUpperCase() : 'PLAN') : t.status === 'active' ? 'PREP · LIVE' : 'PREP';
   let real = 0; for (const [p, r] of tl.realAt) if (p <= field.tau) real = r;
-  $('#hud-clock', field.el).textContent = inPlan ? (S.line ? (S.line.i < 0 ? 'packing' : `step ${S.line.i + 1}/${t.replay.length - 1}`) : '') : `${clock(real)} / 10:00`;
+  $('#hud-clock', field.el).textContent = inPlan ? (S.line ? (S.line.i < 0 ? 'packing' : `step ${S.line.i + 1}/${t.replay.length - 1}`) : '') : `${clock(real)} / ${clock(runSeconds * 1000)}`;
   $('#hud-bag', field.el).innerHTML = inPlan ? tl.plan.bag.map((g) => `<span class="gearchip ${S.ready === g ? 'ready' : ''}">${esc(g)}</span>`).join(' ') : '';
   const pips = $('#hud-alarm', field.el).children;
   for (let i = 0; i < 5; i++) pips[i].className = S.alarm > i ? (S.alarm >= 4 ? 'hot' : 'on') : '';
@@ -535,7 +543,7 @@ function eventRow(e) {
     body = `Hired the <b>${esc(e.npc)}</b> · <span class="hidden">${esc(e.receipt)}</span><br>${what}`;
   }
   if (k === 'plan') body = `Plan submitted: bag [${esc((e.plan?.bag || []).join(', '))}], ${(e.plan?.steps || []).length} steps`;
-  if (k === 'settle') body = `${e.ok ? '' : '⚠ '}${esc(e.detail)}`;
+  if (k === 'settle') body = `${e.ok ? '' : '⚠ '}${esc(e.detail)}${e.explorer ? ` · <a href="${esc(e.explorer)}" target="_blank" rel="noopener" style="color:var(--near)">${esc(e.tx.slice(0, 10))}… ↗</a>` : ''}`;
   return `<div class="ev"><div class="t">${secs(e.t)}</div><div class="k ${k}">${label}</div><div class="body">${body}</div></div>`;
 }
 
@@ -557,7 +565,7 @@ function render(t) {
       <span class="badge ${esc(t.status)}">${esc(t.status)}</span>
       <span class="big">${esc(t.player || 'Anonymous lead')}</span>
       <span class="reason">${esc(t.reason || 'Working the heist…')}</span>
-      <div class="meta">${counts.probe} probes · ${counts.bench} bench tests · ${counts.hire} hires · ${last ? secs(last.t) : '0s'} elapsed · run ${esc(t.runId)}${t.chainRunId ? ` · chain run #${esc(t.chainRunId)}` : ''}</div>
+      <div class="meta">${counts.probe} probes · ${counts.bench} bench tests · ${counts.hire} hires · ${last ? secs(last.t) : '0s'} elapsed · run ${esc(t.runId)}${t.chainRunId ? ` · chain run #${esc(t.chainRunId)}` : ''}${t.settlement?.explorer ? ` · <a href="${esc(t.settlement.explorer)}" target="_blank" rel="noopener">settlement tx ${esc(t.settlement.tx.slice(0, 10))}… ↗</a>` : ''}</div>
     </div>`;
   setField(t);
   $('#panels').innerHTML = `<div class="grid">

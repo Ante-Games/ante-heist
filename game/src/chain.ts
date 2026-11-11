@@ -2,7 +2,7 @@ import { NPC_PRICE_YOCTO, REWARD_YOCTO, formatNear, type Npc } from './rules.ts'
 
 export interface StartCheck { ok: boolean; player: string | null; error?: string }
 export interface HireCheck { ok: boolean; receipt: string; error?: string }
-export interface SettleResult { ok: boolean; detail: string }
+export interface SettleResult { ok: boolean; detail: string; tx?: string; explorer?: string }
 
 // What the game server needs from the chain. The server never moves funds itself except
 // through `settle`, which only the settlement key can call on the contract.
@@ -14,7 +14,6 @@ export interface Chain {
   settle(chainRunId: string | null, cleared: boolean): Promise<SettleResult>;
 }
 
-const NPC_ENUM: Record<Npc, string> = { scout: 'Scout', cryptographer: 'Cryptographer', operator: 'Operator' };
 
 // Local play with no NEAR account. Hires are accepted with {"mock": true} and nothing is paid.
 export class MockChain implements Chain {
@@ -49,7 +48,7 @@ interface ChainRun { mission_id: string; player: string; hires: ChainHire[]; out
 // account; the server only reads the contract and calls `settle_run` with the settlement key.
 export class TestnetChain implements Chain {
   mode = 'testnet' as const;
-  private settler: Promise<{ callFunction: (a: Record<string, unknown>) => Promise<unknown> }> | null = null;
+  private settler: Promise<{ callFunctionRaw: (a: Record<string, unknown>) => Promise<{ transaction: { hash: string } }> }> | null = null;
   private rpcUrl: string;
   private contractId: string;
   private missionId: string;
@@ -73,8 +72,11 @@ export class TestnetChain implements Chain {
       howTo: [
         `call ${this.contractId}.start_run({"mission_id":"${this.missionId}"}) from your account; it returns your run_id`,
         `POST /runs with {"player":"<your account>","chainRunId":"<run_id>"}`,
-        `to hire: call ${this.contractId}.hire({"run_id":<run_id>,"npc":"Scout|Cryptographer|Operator"}) with the price attached, then POST the hire with {"payment":{"hireIndex":<index it returned>}}`,
+        `to hire: call ${this.contractId}.hire({"run_id":<run_id>,"npc":"scout|cryptographer|operator"}) with the price attached, then POST the hire with {"payment":{"hireIndex":<index it returned>}}`,
       ],
+      explorer: `https://testnet.nearblocks.io/address/${this.contractId}`,
+      reward: `${formatNear(REWARD_YOCTO)} NEAR`,
+      prices: Object.fromEntries(Object.entries(NPC_PRICE_YOCTO).map(([k, v]) => [k, `${formatNear(v)} NEAR`])),
     };
   }
 
@@ -123,7 +125,7 @@ export class TestnetChain implements Chain {
     const run = await this.getRun(chainRunId, (r) => !!r && r.hires.length > (idx as number));
     const h = run?.hires[idx as number];
     if (!h) return { ok: false, receipt, error: `no hire #${idx} on run ${chainRunId}` };
-    if (h.npc !== NPC_ENUM[npc]) return { ok: false, receipt, error: `hire #${idx} paid the ${h.npc}, not the ${NPC_ENUM[npc]}` };
+    if (h.npc.toLowerCase() !== npc) return { ok: false, receipt, error: `hire #${idx} paid the ${h.npc.toLowerCase()}, not the ${npc}` };
     return { ok: true, receipt };
   }
 
@@ -139,8 +141,10 @@ export class TestnetChain implements Chain {
   async settle(chainRunId: string | null, cleared: boolean): Promise<SettleResult> {
     try {
       const acct = await this.settlerAccount();
-      await acct.callFunction({ contractId: this.contractId, methodName: 'settle_run', args: { run_id: Number(chainRunId), cleared }, gas: 50_000_000_000_000n });
-      return { ok: true, detail: cleared ? `settled on ${this.contractId}: reward paid` : `settled on ${this.contractId}: reward withheld` };
+      const out = await acct.callFunctionRaw({ contractId: this.contractId, methodName: 'settle_run', args: { run_id: Number(chainRunId), cleared }, gas: 50_000_000_000_000n });
+      const tx = out.transaction.hash;
+      const detail = cleared ? `settled on ${this.contractId}: ${formatNear(REWARD_YOCTO)} NEAR reward paid` : `settled on ${this.contractId}: reward withheld`;
+      return { ok: true, detail, tx, explorer: `https://testnet.nearblocks.io/txns/${tx}` };
     } catch (e) {
       return { ok: false, detail: `settle failed: ${(e as Error).message}` };
     }

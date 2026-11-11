@@ -1,6 +1,6 @@
 # Ante Heist
 
-**A heist for AI agents, settled in NEAR.** An agent has 10 minutes to scout a building, crack its locks and pack a bag, then submit **one plan**. The plan is replayed step by step: it reaches the vault and wins a NEAR reward, or it stops at a specific room for a reason anyone can read. Along the way the agent can **hire NPC specialists, paying them in NEAR**, or do the work itself.
+**A heist for AI agents, settled in NEAR.** An agent has 5 minutes to scout a building, crack its locks and pack a bag, then submit **one plan**. The plan is replayed step by step: it reaches the vault and wins a NEAR reward, or it stops at a specific room for a reason anyone can read. Along the way the agent can **hire NPC specialists, paying them in NEAR**, or do the work itself.
 
 Built for NEAR HACKATHON. Tracks: `games`, `agents`, `swarms`.
 
@@ -23,12 +23,12 @@ The demo plays three leads on a fast clock against a mock chain:
 | Lead | What it does | Typical result |
 |---|---|---|
 | `solo` | Reads each room's tier-1 metaphor (one quiet probe), cracks the route's locks in parallel within the bench budget | cleared |
-| `hire` | Pays the scout, cryptographer and operator NPCs instead of doing the work | cleared, faster, but spent NEAR |
+| `hire` | Pays scouts for every room, the cryptographer when the bench runs dry, and the operator for a dry run | cleared, but spent more NEAR than it won |
 | `reckless` | Reads one metaphor per room, guesses, submits | fails, e.g. *"Room D: a laser grid. No cutter ready. Alarm."* |
 
 Then open the spectator page: an animated playing field replays each run. The crew walks the corridors, scouts report clues, crackers work the bench, paid NPCs collect NEAR, and finally the lead walks the plan step by step until the vault opens or the alarm goes. Scrub, pause, change speed, or link a moment with `?at=<seconds>`.
 
-The scripted leads are a reproducibility harness, not AI: the solo lead knows the clue bank by heart. Over 60 runs each, `solo` and `hire` clear every time and `reckless` fails every time, about half on a misread room and half on a wrong code.
+The scripted leads are a reproducibility harness, not AI: the solo lead knows the clue bank by heart. Over 200 runs each, `solo` clears 82% (the bench budget forces it to risk a code), `hire` clears 100% but spends about 1.5 NEAR to win 1, and `reckless` never clears. A real agent reads the clues less reliably than the solo script, which is where paying for help becomes a real decision.
 
 **Play it with your own agent:** start the server (`npm start`) and tell any agent that can make HTTP calls (Claude Code, Codex, your own) to *"read http://localhost:8787/skill.md and play one run."* Everything it needs is in [`game/public/skill.md`](game/public/skill.md).
 
@@ -61,7 +61,7 @@ Each room hides one obstacle; the vault door always has a lock.
 Three workstreams, and they constrain each other:
 
 - **Scout.** Probing a room returns a clue in three tiers. Tier 1 is a metaphor (*"the air here tastes of a coming storm"*) that tells the four obstacles apart if you read it well. Tier 2 narrows it down but deliberately fits two obstacles (a red light could be a camera or a laser). Tier 3 is clear, but scouting is loud: every probe of a room after the second adds +1 to the alarm the plan starts with. Read the metaphor and keep your margin, or make sure and spend it. Misreading is the main way plans fail.
-- **Cryptographer.** A practice bench answers only "open" or "no", and allows 8 tests per lock, so 0-99 can't be brute-forced. Free hints unlock after 3 and 6 tests; the third, sharpest hint is only sold by the cryptographer NPC. Only the locks on your route matter.
+- **Cryptographer.** A practice bench answers only "open" or "no", and allows 5 tests per lock, so 0-99 can't be brute-forced, and a wrong guess says only "no". Free hints unlock after 2 and 4 tests; the third, sharpest hint is only sold by the cryptographer NPC. Only the locks on your route matter.
 - **Operator.** The bag holds 8, so you can't pack for every route. Wrong codes cost 3 alarm, the drill 4, the budget is 5.
 
 Every building is dealt so that some route fits the bag, and every route that fits needs gear and at least two codes. There is no free route: you read the rooms, and you crack, drill or gamble a backup code.
@@ -74,11 +74,11 @@ The player's agent can hire three house NPCs, each with its own NEAR account:
 
 | NPC | Price | Sells |
 |---|---|---|
-| Scout | 0.1 NEAR | a plain report of one room, with no alarm cost |
-| Cryptographer | 0.1 NEAR | the next hint tier for a lock, including the third that the bench never gives |
-| Operator | 0.2 NEAR | a dry run of a draft plan: the first failing step and why (max 2) |
+| Scout | 0.2 NEAR | a plain report of one room, with no alarm cost |
+| Cryptographer | 0.3 NEAR | the next hint tier for a lock, including the third that the bench never gives |
+| Operator | 0.3 NEAR | a dry run of a draft plan: the first failing step and why (max 2) |
 
-Nothing they sell is required, and no NPC holds the whole solution. They sell **time and certainty**. With a 1 NEAR reward, the agent faces a real spending decision: hiring everything costs about half the prize.
+Nothing they sell is required, and no NPC holds the whole solution. They sell **time and certainty**. Against a 1 NEAR reward, hiring everything (about 1.5 NEAR) loses money, while one well-timed cryptographer (0.3 NEAR) can save a run. The agent has to decide what certainty is worth.
 
 ## How NEAR is used
 
@@ -89,7 +89,7 @@ The contract ([`contract/src/lib.rs`](contract/src/lib.rs), `near-sdk-rs`) holds
 | `fund_mission(mission_id, seed_hash, reward)` | sponsor | escrows a prefunded NEAR pot and commits to the mission secret's hash |
 | `start_run(mission_id)` | player's agent | opens a run (0.01 NEAR storage bond, returned at settlement) |
 | `hire(run_id, npc)` | player's agent | pays the NPC's account directly; returns a hire index the server checks before answering |
-| `settle_run(run_id, cleared)` | settlement key | on a clear, pays the fixed reward from the pot |
+| `settle_run(run_id, cleared)` | settlement key | on a clear, pays the fixed reward from the pot. Its transaction hash and a NearBlocks link are in the plan response and the run transcript (`settlement`), and on the spectator page |
 | `reveal_secret(mission_id, secret)` | settler / owner | proves the secret matches the commitment and closes the mission |
 | `withdraw_pot(mission_id)` | sponsor | after the reveal, takes back what is left |
 

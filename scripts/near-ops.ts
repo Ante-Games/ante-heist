@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { Account, JsonRpcProvider, KeyPair, nearToYocto } from 'near-api-js';
 import { sha256Hex } from '../game/src/heist.ts';
+import { NPC_PRICE_YOCTO, formatNear } from '../game/src/rules.ts';
 import { playScripted } from '../game/lead/scripted.ts';
 
 export const WASM = 'contract/target/near/ante_heist_contract.wasm';
@@ -93,8 +94,7 @@ export async function setupMission(o: {
   };
 }
 
-const PRICE: Record<string, string> = { scout: '0.1', cryptographer: '0.1', operator: '0.2' };
-const NAME: Record<string, string> = { scout: 'Scout', cryptographer: 'Cryptographer', operator: 'Operator' };
+const PRICE: Record<string, string> = Object.fromEntries(Object.entries(NPC_PRICE_YOCTO).map(([k, v]) => [k, formatNear(v)]));
 
 // The player's agent opens a run on chain, then plays; every hire is a real on-chain payment.
 export async function playOnChain(o: {
@@ -110,12 +110,12 @@ export async function playOnChain(o: {
   log(`on chain: start_run → run_id ${runId}`);
   const pay = async (npc: 'scout' | 'cryptographer' | 'operator') => {
     const hireIndex = await player.callFunction<number>({
-      contractId: o.contractId, methodName: 'hire', gas: TGAS(30), deposit: nearToYocto(PRICE[npc]), args: { run_id: runId, npc: NAME[npc] },
+      contractId: o.contractId, methodName: 'hire', gas: TGAS(30), deposit: nearToYocto(PRICE[npc]), args: { run_id: runId, npc },
     });
-    log(`  on chain: hire(${NAME[npc]}) paid ${PRICE[npc]} NEAR → hire #${hireIndex}`);
+    log(`  on chain: hire(${npc}) paid ${PRICE[npc]} NEAR → hire #${hireIndex}`);
     return { hireIndex };
   };
   const { transcript } = await playScripted({ base: o.base, style: o.style, pay, start: { player: o.playerId, chainRunId: String(runId) }, log });
   const run = await n.view<{ outcome: string | null; reward_paid: string; hires: unknown[] }>(o.contractId, 'get_run', { run_id: runId });
-  return { runId, transcript: transcript as { status: string; log: { kind: string; ok?: boolean; detail?: string }[] }, run };
+  return { runId, transcript: transcript as { status: string; log: { kind: string; ok?: boolean; detail?: string }[]; settlement: { tx: string | null; explorer: string | null } | null }, run };
 }
