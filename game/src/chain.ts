@@ -73,7 +73,7 @@ export class TestnetChain implements Chain {
       howTo: [
         `call ${this.contractId}.start_run({"mission_id":"${this.missionId}"}) from your account; it returns your run_id`,
         `POST /runs with {"player":"<your account>","chainRunId":"<run_id>"}`,
-        `to hire: call ${this.contractId}.hire({"run_id":<run_id>,"npc":"scout|cryptographer|operator"}) with the price attached, then POST the hire with {"payment":{"hireIndex":<index it returned>}}`,
+        `to hire: call ${this.contractId}.hire({"run_id":<run_id>,"npc":"scout|cryptographer|operator|analyst"}) with the price attached, then POST the hire with {"payment":{"hireIndex":<index it returned>}}`,
       ],
       explorer: `https://testnet.nearblocks.io/address/${this.contractId}`,
       reward: `${formatNear(REWARD_YOCTO)} NEAR`,

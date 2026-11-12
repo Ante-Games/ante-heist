@@ -35,14 +35,17 @@ export const QUIET_PROBES = 2;
 export const LOCK_HINT_AT = [2, 4] as const; // bench attempts that unlock free hint tiers 1-2; tier 3 is sold by the cryptographer
 export const BENCH_MAX = 5; // bench tests per lock: no brute force over 0-99
 export const MAX_DRY_RUNS = 2;
+export const MAX_ANALYST = 3; // analyst questions per run
+export const ANALYST_QUESTION_MAX = 800; // characters
 
-export const NPCS = ['scout', 'cryptographer', 'operator'] as const;
+export const NPCS = ['scout', 'cryptographer', 'operator', 'analyst'] as const;
 export type Npc = (typeof NPCS)[number];
 // Prices in yoctoNEAR (1 NEAR = 10^24). Mirrored by the contract's defaults.
 export const NPC_PRICE_YOCTO: Record<Npc, bigint> = {
   scout: 25n * 10n ** 22n, // 0.25 NEAR
   cryptographer: 4n * 10n ** 23n, // 0.4 NEAR
   operator: 4n * 10n ** 23n, // 0.4 NEAR
+  analyst: 10n ** 23n, // 0.1 NEAR; set on chain by the owner (scripts/add-analyst.ts)
 };
 export const REWARD_YOCTO = 10n ** 24n; // 1 NEAR
 

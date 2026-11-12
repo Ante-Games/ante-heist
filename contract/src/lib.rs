@@ -11,6 +11,10 @@
 use near_sdk::store::{IterableMap, Vector};
 use near_sdk::{env, near, require, AccountId, NearToken, PanicOnDefault, Promise};
 
+// The analyst was added after launch. Its account and price live under their own storage key,
+// so the contract state stored at launch still loads unchanged after an in-place upgrade.
+const ANALYST_KEY: &[u8] = b"npc:analyst";
+
 pub const STORAGE_BOND: NearToken = NearToken::from_millinear(10); // 0.01 NEAR, returned at settlement
 
 // JSON names are lowercase, matching the game server ("scout"); the capitalised names are still accepted.
@@ -24,6 +28,9 @@ pub enum Npc {
     Cryptographer,
     #[serde(alias = "Operator")]
     Operator,
+    // Added after launch. A new last variant keeps stored hires readable.
+    #[serde(alias = "Analyst")]
+    Analyst,
 }
 
 #[near(serializers = [json, borsh])]
@@ -101,7 +108,15 @@ impl Contract {
 
     pub fn set_npc(&mut self, npc: Npc, account: AccountId, price: NearToken) {
         self.assert_owner();
-        *self.npc_mut(npc) = NpcInfo { account, price };
+        let info = NpcInfo { account, price };
+        match npc {
+            Npc::Scout => self.scout = info,
+            Npc::Cryptographer => self.cryptographer = info,
+            Npc::Operator => self.operator = info,
+            Npc::Analyst => {
+                env::storage_write(ANALYST_KEY, &near_sdk::borsh::to_vec(&info).unwrap());
+            }
+        }
     }
 
     pub fn set_settler(&mut self, settler: AccountId) {
@@ -171,7 +186,7 @@ impl Contract {
     /// Returns the hire index the game server checks before answering.
     #[payable]
     pub fn hire(&mut self, run_id: u64, npc: Npc) -> u32 {
-        let info = self.npc(npc).clone();
+        let info = self.npc(npc);
         let deposit = env::attached_deposit();
         let caller = env::predecessor_account_id();
         let run = self.runs.get_mut(run_id as u32).unwrap_or_else(|| env::panic_str("no such run"));
@@ -232,7 +247,7 @@ impl Contract {
     }
 
     pub fn get_npc(&self, npc: Npc) -> NpcInfo {
-        self.npc(npc).clone()
+        self.npc(npc)
     }
 
     pub fn get_settler(&self) -> AccountId {
@@ -249,19 +264,15 @@ impl Contract {
         require!(env::predecessor_account_id() == self.owner, "only the owner");
     }
 
-    fn npc(&self, npc: Npc) -> &NpcInfo {
+    fn npc(&self, npc: Npc) -> NpcInfo {
         match npc {
-            Npc::Scout => &self.scout,
-            Npc::Cryptographer => &self.cryptographer,
-            Npc::Operator => &self.operator,
-        }
-    }
-
-    fn npc_mut(&mut self, npc: Npc) -> &mut NpcInfo {
-        match npc {
-            Npc::Scout => &mut self.scout,
-            Npc::Cryptographer => &mut self.cryptographer,
-            Npc::Operator => &mut self.operator,
+            Npc::Scout => self.scout.clone(),
+            Npc::Cryptographer => self.cryptographer.clone(),
+            Npc::Operator => self.operator.clone(),
+            Npc::Analyst => {
+                let raw = env::storage_read(ANALYST_KEY).unwrap_or_else(|| env::panic_str("the analyst is not set up on this contract"));
+                near_sdk::borsh::from_slice(&raw).unwrap_or_else(|_| env::panic_str("unreadable analyst record"))
+            }
         }
     }
 }
@@ -455,6 +466,30 @@ mod tests {
         ctx("settler.testnet", NearToken::from_yoctonear(0));
         c.reveal_secret("m1".into(), SECRET.into());
         start(&mut c, "lead.testnet");
+    }
+
+    #[test]
+    fn analyst_is_hired_once_the_owner_sets_it_up() {
+        let mut c = setup();
+        ctx("owner.testnet", NearToken::from_yoctonear(0));
+        c.set_npc(Npc::Analyst, acc("analyst.testnet"), NearToken::from_millinear(100));
+        assert_eq!(c.get_npc(Npc::Analyst).account, acc("analyst.testnet"));
+        let id = start(&mut c, "lead.testnet");
+        ctx("lead.testnet", NearToken::from_millinear(100));
+        assert_eq!(c.hire(id, Npc::Analyst), 0);
+        let run = c.get_run(id).unwrap();
+        assert_eq!(run.hires[0].npc, Npc::Analyst);
+        assert_eq!(run.hires[0].paid, NearToken::from_millinear(100));
+        assert_eq!(near_sdk::serde_json::to_string(&Npc::Analyst).unwrap(), "\"analyst\"");
+    }
+
+    #[test]
+    #[should_panic(expected = "the analyst is not set up")]
+    fn analyst_cannot_be_hired_before_setup() {
+        let mut c = setup();
+        let id = start(&mut c, "lead.testnet");
+        ctx("lead.testnet", NearToken::from_millinear(100));
+        c.hire(id, Npc::Analyst);
     }
 
     #[test]

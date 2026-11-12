@@ -8,7 +8,8 @@ const contractId = process.env.HEIST_CONTRACT_ID!;
 const provider = new JsonRpcProvider({ url: rpc });
 const owner = new Account(process.env.OWNER_ACCOUNT_ID!, provider, process.env.OWNER_PRIVATE_KEY as `ed25519:${string}`);
 for (const npc of NPCS) {
-  const info = await provider.callFunction({ contractId, method: 'get_npc', args: { npc } }) as { account: string; price: string };
+  const info = await provider.callFunction({ contractId, method: 'get_npc', args: { npc } }).catch(() => null) as { account: string; price: string } | null;
+  if (!info) { console.log(`${npc}: not set up on this contract (see scripts/add-analyst.ts)`); continue; }
   if (BigInt(info.price) === NPC_PRICE_YOCTO[npc]) { console.log(`${npc}: already ${formatNear(NPC_PRICE_YOCTO[npc])} NEAR`); continue; }
   await owner.callFunction({ contractId, methodName: 'set_npc', args: { npc, account: info.account, price: NPC_PRICE_YOCTO[npc].toString() }, gas: 30_000_000_000_000n });
   console.log(`${npc}: ${formatNear(BigInt(info.price))} → ${formatNear(NPC_PRICE_YOCTO[npc])} NEAR (${info.account})`);

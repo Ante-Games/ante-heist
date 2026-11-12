@@ -121,3 +121,75 @@ test('rooms without a lock bench like a lock that never opens; one-at-a-time is 
   await assert.rejects(slow.probe(runId, 'A'), (e: GameError) => e.status === 429);
   await Promise.all([a, slow.probe(runId, 'B')]); // different rooms run in parallel
 });
+
+// A stand-in for the language model: records what it was shown and can be told to fail.
+function stubAnalyst() {
+  const seen: { observations: string[]; question: string }[] = [];
+  const s = {
+    provider: 'stub', models: ['stub-1'], fail: false, seen,
+    async ask(input: { observations: string[]; question: string }) {
+      seen.push(input);
+      if (s.fail) throw new Error('model down');
+      return { text: 'Room A is most likely a laser (medium).', model: 'stub-1' };
+    },
+  };
+  return s;
+}
+
+test('the analyst sees only what the player has seen, never the heist', async () => {
+  const analyst = stubAnalyst();
+  const runs = new Runs({ missionSecret: 's3cret', chain: new MockChain(), timeScale: 0, dataDir: null, analyst });
+  const { runId } = await runs.create({});
+  const heist = generateHeist(runSeed('s3cret', runId));
+  const probe = await runs.probe(runId, 'A');
+  const wrong = (heist.codes.V! + 1) % 100;
+  await runs.bench(runId, 'V', wrong);
+  await runs.hire(runId, { npc: 'scout', room: 'B', payment: { mock: true } });
+
+  const a = await runs.hire(runId, { npc: 'analyst', question: 'What is in room A?', payment: { mock: true } }) as { opinion: string; model: string; note: string; question: string };
+  assert.equal(a.opinion, 'Room A is most likely a laser (medium).');
+  assert.equal(a.model, 'stub-1');
+  assert.match(a.note, /can be wrong/);
+
+  const shown = analyst.seen[0].observations.join('\n');
+  assert.ok(shown.includes(probe.clue), 'the clue the player saw');
+  assert.ok(shown.includes(`Room B holds`), 'the scout report the player bought');
+  assert.match(shown, new RegExp(`lock V: ${String(wrong).padStart(2, '0')} did not open`));
+  // Nothing the player has not seen: no code, no tier-2/3 clue, no clue for an unprobed room.
+  assert.ok(!shown.includes(`${String(heist.codes.V).padStart(2, '0')} OPENED`));
+  for (const room of ROOMS) for (const [i, clue] of heist.clues[room].entries()) {
+    if (clue === probe.clue) continue; // another room may hold the same obstacle and show the same line
+    assert.ok(!shown.includes(clue), `unseen clue for ${room} tier ${i + 1} stays hidden`);
+  }
+  for (const hint of heist.lockHints.V ?? []) assert.ok(!shown.includes(hint), 'unearned lock hints stay hidden');
+
+  const log = (runs.view(runId) as { log: { kind: string; npc?: string; answer?: { question: string } }[] }).log;
+  assert.equal(log.find((e) => e.npc === 'analyst')!.answer!.question, 'What is in room A?');
+});
+
+test('the analyst: three questions per run, a question is required, and a failed model call spends nothing', async () => {
+  const analyst = stubAnalyst();
+  const runs = new Runs({ missionSecret: 's3cret', chain: new MockChain(), timeScale: 0, dataDir: null, analyst });
+  const { runId } = await runs.create({});
+  await assert.rejects(runs.hire(runId, { npc: 'analyst', payment: { mock: true } }), (e: GameError) => e.status === 400);
+  await assert.rejects(runs.hire(runId, { npc: 'analyst', question: 'x'.repeat(801), payment: { mock: true } }), (e: GameError) => e.status === 400);
+  await assert.rejects(runs.hire(runId, { npc: 'analyst', question: 'hello' }), (e: GameError) => e.status === 402);
+
+  analyst.fail = true;
+  await assert.rejects(runs.hire(runId, { npc: 'analyst', question: 'hello', payment: { mock: true } }), (e: GameError) => e.status === 503 && /not spent/.test(e.message));
+  assert.equal((runs.view(runId) as { log: { kind: string }[] }).log.filter((e) => e.kind === 'hire').length, 0, 'a failed call is not logged as a hire');
+  analyst.fail = false;
+
+  for (let i = 0; i < 3; i++) await runs.hire(runId, { npc: 'analyst', question: `q${i}`, payment: { mock: true } });
+  await assert.rejects(runs.hire(runId, { npc: 'analyst', question: 'one more', payment: { mock: true } }), (e: GameError) => e.status === 409);
+  // Analyst questions never change the verdict: the judge reads only the plan.
+  const heist = generateHeist(runSeed('s3cret', runId));
+  assert.equal((await runs.submit(runId, solve(heist)!)).status, 'cleared');
+});
+
+test('without a model the analyst is off and says so before any payment', async () => {
+  const { runs } = setup();
+  const { runId } = await runs.create({});
+  await assert.rejects(runs.hire(runId, { npc: 'analyst', question: 'hello', payment: { mock: true } }), (e: GameError) => e.status === 503 && /nothing was spent/.test(e.message));
+  assert.equal((runs.rules().npcs.analyst as { available: boolean }).available, false);
+});

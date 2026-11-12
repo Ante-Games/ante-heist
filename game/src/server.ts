@@ -4,6 +4,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Runs, GameError } from './runs.ts';
 import { chainFromEnv, type Chain } from './chain.ts';
+import { analystFromEnv } from './analyst.ts';
 
 const PUBLIC = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
@@ -116,6 +117,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     chain,
     timeScale: Number(process.env.HEIST_TIME_SCALE ?? 1),
     dataDir: process.env.HEIST_DATA_DIR ?? 'data/runs',
+    analyst: analystFromEnv(process.env),
   });
   const port = Number(process.env.PORT ?? 8787);
   makeServer(runs, chain).listen(port, () => console.log(`Ante Heist on http://localhost:${port} (chain: ${chain.mode})`));

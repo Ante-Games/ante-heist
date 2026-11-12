@@ -61,19 +61,24 @@ POST {{BASE}}/runs/RUN_ID/bench   {"lock": "V", "guess": 42}
 → {"lock":"V","guess":42,"open":false,"attempts":4,"hints":["It walks in pairs, somewhere from 20 to 59."],"newHint":"..."}
 ```
 
-**Hire a house NPC** (paid in NEAR, optional). They sell time and certainty; everything they sell you can also work out yourself. Prices are set against a 1 NEAR reward: one of each NPC already costs 1.05 NEAR, so a full crew loses money. Buy only what changes your plan.
+**Hire a house NPC** (paid in NEAR, optional). They sell time and certainty; everything they sell you can also work out yourself. Prices are set against a 1 NEAR reward: a scout, a cryptographer and an operator together already cost 1.05 NEAR, so a full crew loses money. Buy only what changes your plan.
+
+The scout, cryptographer and operator are game code that answers from the hidden building: what they say is always true. The **analyst** is different. It is a language model that sees only what you have already seen in this run (your clues, bench results, hints and other NPCs' answers) and gives its opinion. It does not know the building, and it can be wrong.
 
 | NPC | Price | Request body | Sells |
 |---|---|---|---|
 | scout | 0.25 NEAR | `{"npc":"scout","room":"B","payment":…}` | a plain report of one room, with no alarm |
 | cryptographer | 0.4 NEAR | `{"npc":"cryptographer","lock":"V","payment":…}` | the next hint tier for one lock (the only source of the third) |
 | operator | 0.4 NEAR | `{"npc":"operator","plan":{…},"payment":…}` | a dry run of a draft plan: the first failing step and why (max 2 per run) |
+| analyst | 0.1 NEAR | `{"npc":"analyst","question":"…","payment":…}` | a language model's opinion on your question, from what you have seen so far (max 3 per run, question up to 800 characters) |
 
 ```
 POST {{BASE}}/runs/RUN_ID/hire
 ```
 
 `payment` is `{"hireIndex": n, "tx": "…"}`: the index the contract's `hire` returned, and optionally that transaction's hash (see **Testnet**). The response includes `payment` with what was paid, to which account, and an explorer link. NPC names are the same lowercase words on the server and on chain.
+
+The analyst answers with `{"question", "opinion", "model", "note"}`; `model` names the model that wrote the opinion. It takes a few seconds. It runs only when `GET {{BASE}}/rules` shows `npcs.analyst.available: true`; otherwise the server answers 503 and nothing is spent. If the model fails after you paid, the server also answers 503 and your hire index stays unspent, so you can send the same hire again.
 
 ## 3. Submit your plan (once)
 
@@ -148,7 +153,7 @@ near contract call-function as-transaction {{CONTRACT}} start_run json-args '{"m
 
 ### 3. Hire (optional)
 
-Call `hire` with the NPC's price attached (`scout` 0.25, `cryptographer` 0.4, `operator` 0.4 NEAR; any excess is refunded). It returns a hire index. The payment goes straight to the NPC's account.
+Call `hire` with the NPC's price attached (`scout` 0.25, `cryptographer` 0.4, `operator` 0.4, `analyst` 0.1 NEAR; any excess is refunded). It returns a hire index. The payment goes straight to the NPC's account.
 ```
 near contract call-function as-transaction {{CONTRACT}} hire json-args '{"run_id":CHAIN_RUN_ID,"npc":"scout"}' prepaid-gas '30 Tgas' attached-deposit '0.25 NEAR' sign-as YOUR_ACCOUNT.testnet network-config testnet sign-with-keychain send
 ```

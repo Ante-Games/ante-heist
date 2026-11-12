@@ -1,7 +1,7 @@
 // Testnet CLI. Everything runs from ONE funded testnet account you create yourself.
 //
 //   OWNER_ACCOUNT_ID=you.testnet OWNER_PRIVATE_KEY=ed25519:... npm run testnet -- setup
-//       creates heist./settler./scout./cryptographer./operator./player.<you>, deploys and
+//       creates heist./settler./scout./cryptographer./operator./analyst./player.<you>, deploys and
 //       initialises the contract, funds mission-1, and writes .env.testnet (keys + secret).
 //   npm run start:testnet                 run the game server against testnet (another terminal)
 //   npm run testnet -- play [hire|solo]    scripted lead paying real testnet NEAR
@@ -41,7 +41,7 @@ if (cmd === 'setup') {
   const c = need('HEIST_CONTRACT_ID');
   console.log('mission', JSON.stringify(await n.view(c, 'get_mission', { mission_id: need('HEIST_MISSION_ID') }), null, 2));
   console.log('runs', await n.view(c, 'run_count'));
-  for (const npc of ['scout', 'cryptographer', 'operator']) console.log(npc, JSON.stringify(await n.view(c, 'get_npc', { npc })));
+  for (const npc of ['scout', 'cryptographer', 'operator', 'analyst']) console.log(npc, await n.view(c, 'get_npc', { npc }).then((v) => JSON.stringify(v), () => 'not set up on this contract'));
 } else if (cmd === 'reveal') {
   const n = near(RPC);
   const settler = n.account(need('SETTLER_ACCOUNT_ID'), need('SETTLER_PRIVATE_KEY'));

@@ -3,13 +3,15 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   ROOMS, EDGES, GEAR, BAG_CAPACITY, ALARM_BUDGET, ALARM_WRONG_CODE, ALARM_DRILL, RUN_SECONDS,
-  PROBE_SECONDS, BENCH_SECONDS, CLUE_TIERS, QUIET_PROBES, LOCK_HINT_AT, BENCH_MAX, MAX_DRY_RUNS, NPC_PRICE_YOCTO, REWARD_YOCTO,
+  PROBE_SECONDS, BENCH_SECONDS, CLUE_TIERS, QUIET_PROBES, LOCK_HINT_AT, BENCH_MAX, MAX_DRY_RUNS, MAX_ANALYST, ANALYST_QUESTION_MAX,
+  NPC_PRICE_YOCTO, REWARD_YOCTO,
   formatNear, isRoom, asNpc, type Npc, type RoomId,
 } from './rules.ts';
 import { generateHeist, runSeed, sha256Hex, type Heist, type LockId } from './heist.ts';
 import { parsePlan, simulate } from './sim.ts';
 import { replay, suspicion, type LogEvent, type Verdict } from './checker.ts';
 import type { Chain } from './chain.ts';
+import type { Analyst } from './analyst.ts';
 
 export class GameError extends Error {
   status: number;
@@ -45,9 +47,30 @@ export interface RunsOptions {
   timeScale?: number; // multiplies probe/bench durations; 0 in tests
   now?: () => number;
   dataDir?: string | null;
+  analyst?: Analyst | null; // the language-model NPC; null or missing turns it off
 }
 
-export function rulesSummary(timeScale = 1) {
+export const ANALYST_NOTE = 'An opinion from a language model that saw only what you have seen in this run. It does not know the building and it can be wrong.';
+
+// What the analyst is told: only things the player has already been shown in this run.
+export function observations(log: LogEvent[], secondsLeft: number): string[] {
+  const out: string[] = [];
+  for (const e of log) {
+    if (e.kind === 'probe') out.push(`Probe of room ${e.room} (tier ${e.tier} clue): "${e.clue}"`);
+    else if (e.kind === 'bench') out.push(`Bench test on lock ${e.lock}: ${String(e.guess).padStart(2, '0')} ${e.open ? 'OPENED it' : 'did not open it'}${e.hint ? `. New hint for lock ${e.lock}: "${e.hint}"` : ''}`);
+    else if (e.kind === 'hire') {
+      const a = (e.answer ?? {}) as Record<string, unknown>;
+      if (e.npc === 'scout') out.push(`Scout NPC report (always true): ${String(a.report)}`);
+      else if (e.npc === 'cryptographer') out.push(`Cryptographer NPC on lock ${e.target} (always true): ${a.hints ? `hints so far: ${(a.hints as string[]).map((h) => `"${h}"`).join(' ')}` : String(a.report)}`);
+      else if (e.npc === 'operator') out.push(`Operator NPC dry run of a draft plan (always true): ${String(a.verdict)}${a.reason ? ` Step ${String(a.failedAtStep)}: ${String(a.reason)}` : ''}`);
+    }
+  }
+  out.push(`Alarm the plan would start with now: ${suspicion(log)} of ${ALARM_BUDGET}.`);
+  out.push(`Time left on the clock: about ${Math.max(0, Math.round(secondsLeft))} seconds.`);
+  return out;
+}
+
+export function rulesSummary(timeScale = 1, analyst: Analyst | null = null) {
   return {
     map: { places: ['Lobby', ...ROOMS, 'Vault'], edges: EDGES },
     gear: GEAR,
@@ -59,11 +82,18 @@ export function rulesSummary(timeScale = 1) {
     lockHintsAtAttempts: LOCK_HINT_AT,
     benchTestsPerLock: BENCH_MAX,
     maxDryRuns: MAX_DRY_RUNS,
+    maxAnalystQuestions: MAX_ANALYST,
     reward: `${formatNear(REWARD_YOCTO)} NEAR`,
     npcs: {
       scout: { price: `${formatNear(NPC_PRICE_YOCTO.scout)} NEAR`, sells: 'a plain report of one room: {"npc":"scout","room":"A"}' },
       cryptographer: { price: `${formatNear(NPC_PRICE_YOCTO.cryptographer)} NEAR`, sells: 'the next hint tier for one lock: {"npc":"cryptographer","lock":"V"}' },
       operator: { price: `${formatNear(NPC_PRICE_YOCTO.operator)} NEAR`, sells: `a dry run of a draft plan, first failing step (max ${MAX_DRY_RUNS}): {"npc":"operator","plan":{...}}` },
+      analyst: {
+        price: `${formatNear(NPC_PRICE_YOCTO.analyst)} NEAR`,
+        sells: `a language model's opinion on what you have seen so far (max ${MAX_ANALYST}, can be wrong): {"npc":"analyst","question":"..."}`,
+        available: analyst !== null,
+        ...(analyst ? { provider: analyst.provider, models: analyst.models } : { note: 'this server has no model configured, so the analyst is off' }),
+      },
     },
   };
 }
@@ -96,7 +126,7 @@ export class Runs {
   }
 
   rules() {
-    return rulesSummary(this.timeScale);
+    return rulesSummary(this.timeScale, this.o.analyst ?? null);
   }
 
   private get(id: string): Run {
@@ -182,11 +212,11 @@ export class Runs {
     return { lock, guess, open, attempts: r.attempts[lock], testsLeft: BENCH_MAX - r.attempts[lock]!, hints: this.hints(r, lock), newHint: hint };
   }
 
-  async hire(id: string, body: { npc?: unknown; room?: unknown; lock?: unknown; plan?: unknown; payment?: unknown }) {
+  async hire(id: string, body: { npc?: unknown; room?: unknown; lock?: unknown; plan?: unknown; question?: unknown; payment?: unknown }) {
     const r = this.get(id);
     this.live(r);
     const npc = asNpc(body.npc);
-    if (!npc) throw new GameError(400, 'npc is scout, cryptographer or operator');
+    if (!npc) throw new GameError(400, 'npc is scout, cryptographer, operator or analyst');
     let target: string;
     let answer: unknown;
     const pay = async () => {
@@ -215,7 +245,7 @@ export class Runs {
         r.boughtTier[lock] = this.hintTier(r, lock) + 1;
         answer = { lock, hints: this.hints(r, lock) };
       }
-    } else {
+    } else if (npc === 'operator') {
       const used = r.log.filter((e) => e.kind === 'hire' && e.npc === 'operator').length;
       if (used >= MAX_DRY_RUNS) throw new GameError(409, `the operator only does ${MAX_DRY_RUNS} dry runs per heist`);
       const plan = parsePlan(body.plan);
@@ -224,6 +254,31 @@ export class Runs {
       target = 'plan';
       const sim = simulate(r.heist, plan, suspicion(r.log));
       answer = sim.cleared ? { verdict: 'This plan reaches the vault.' } : { verdict: 'This plan fails.', failedAtStep: sim.failedAt, reason: sim.reason };
+    } else {
+      // The analyst is the only NPC that runs a model. It is never shown the heist.
+      const analyst = this.o.analyst;
+      if (!analyst) throw new GameError(503, 'the analyst is not available on this server (no model configured); nothing was spent');
+      const question = typeof body.question === 'string' ? body.question.trim() : '';
+      if (!question || question.length > ANALYST_QUESTION_MAX) throw new GameError(400, `analyst needs "question": 1-${ANALYST_QUESTION_MAX} characters`);
+      const used = r.log.filter((e) => e.kind === 'hire' && e.npc === 'analyst').length;
+      if (used >= MAX_ANALYST) throw new GameError(409, `the analyst only answers ${MAX_ANALYST} questions per heist`);
+      if (r.busy.has('analyst')) throw new GameError(429, 'the analyst is busy; one question at a time');
+      r.busy.add('analyst');
+      try {
+        receipt = await pay();
+        target = 'question';
+        try {
+          const reply = await analyst.ask({ observations: observations(r.log, RUN_SECONDS - this.t(r) / 1000), question });
+          answer = { question, opinion: reply.text, model: reply.model, note: ANALYST_NOTE };
+        } catch (e) {
+          // The model did not answer: the payment stays unspent so the same hire can be sent again.
+          r.receipts.delete(receipt);
+          console.error(`analyst: ${(e as Error).message}`);
+          throw new GameError(503, 'the analyst could not answer right now; your payment is not spent, so send the same hire again or carry on without it');
+        }
+      } finally {
+        r.busy.delete('analyst');
+      }
     }
     r.log.push({ t: this.t(r), kind: 'hire', npc, target, receipt, answer, ...(payment.tx ? { tx: payment.tx, explorer: payment.explorer } : {}) });
     return { npc, receipt, ...(answer as object), payment };

@@ -140,7 +140,7 @@ const secs = (ms) => (ms / 1000).toFixed(1) + 's';
 const clock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const OB = { camera: 'camera', laser: 'laser grid', shaft: 'shaft', door: 'locked door' };
 const GEAR_FOR = { camera: 'jammer', laser: 'cutter', shaft: 'rope' };
-const PRICE = { scout: 0.25, cryptographer: 0.4, operator: 0.4 };
+const PRICE = { scout: 0.25, cryptographer: 0.4, operator: 0.4, analyst: 0.1 };
 let selected = location.hash.slice(1) || null;
 let runSeconds = 300;
 fetch('/rules').then((r) => r.json()).then((r) => { runSeconds = r.clock?.runSeconds ?? runSeconds; for (const [k, v] of Object.entries(r.chain?.prices ?? {})) PRICE[k] = parseFloat(v); }).catch(() => {});
@@ -173,7 +173,10 @@ const CAST = {
   hscout: { sprite: 'pulse', name: 'scout npc', paid: true },
   hcrypto: { sprite: 'vector', name: 'cryptographer npc', paid: true },
   operator: { sprite: 'nova-quartz', name: 'operator npc', paid: true },
+  analyst: { sprite: 'pulse-quartz', name: 'analyst npc, a language model', paid: true },
 };
+// Model text is shown as one plain line: markdown marks and line breaks are dropped.
+const brief = (s, n) => { const x = String(s ?? '').replace(/[*_#`]+/g, '').replace(/\s+/g, ' ').trim(); return x.length > n ? x.slice(0, n - 1) + '…' : x; };
 const SPEED = 380; // field units per playback second
 const add = (a, b) => [a[0] + b[0], a[1] + b[1]];
 const lerp = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
@@ -195,6 +198,7 @@ const lockPoint = (lock) => lock === 'V' ? [795, 250] : add(P[lock], [70, -52]);
 function slot(kind, target) {
   if (kind === 'lead') return add(P.Lobby, [0, 55]);
   if (kind === 'operator') return add(P.Lobby, [-30, -40]);
+  if (kind === 'analyst') return add(P.Lobby, [34, -40]);
   if (kind === 'scout') return add(P[target], [-58, 50]);
   if (kind === 'hscout') return add(P[target], [-58, -8]);
   if (target === 'V') return kind === 'cracker' ? [752, 318] : [752, 205];
@@ -202,7 +206,7 @@ function slot(kind, target) {
 }
 function walkPath(kind, target) {
   const end = slot(kind, target);
-  if (kind === 'lead' || kind === 'operator') return [P.Lobby, end];
+  if (kind === 'lead' || kind === 'operator' || kind === 'analyst') return [P.Lobby, end];
   const place = target === 'V' ? 'Vault' : target;
   const via = bfs('Lobby', place).slice(1, target === 'V' ? -1 : -1).map((p) => P[p]);
   return [P.Lobby, ...via, end];
@@ -233,11 +237,12 @@ function buildTimeline(t) {
       const code = String(e.guess).padStart(2, '0');
       tl.bubbles.push({ a: a.id, t: pb, dur: e.hint ? 3.4 : 1.6, cls: e.open ? 'good' : '', html: `<span class="who">bench ${esc(e.lock)}</span>${code} ${e.open ? '→ open!' : '✗'}${e.hint ? `<br><i>${esc(e.hint)}</i>` : ''}` });
     } else if (e.kind === 'hire') {
-      const kind = e.npc === 'scout' ? 'hscout' : e.npc === 'cryptographer' ? 'hcrypto' : 'operator';
-      const a = actor(kind, kind === 'operator' ? undefined : e.target); a.arrive = Math.min(a.arrive, pb);
+      const kind = e.npc === 'scout' ? 'hscout' : e.npc === 'cryptographer' ? 'hcrypto' : e.npc === 'analyst' ? 'analyst' : 'operator';
+      const a = actor(kind, kind === 'operator' || kind === 'analyst' ? undefined : e.target); a.arrive = Math.min(a.arrive, pb);
       const ans = e.answer || {};
-      const said = e.npc === 'scout' ? esc(ans.report) : e.npc === 'cryptographer' ? esc(ans.report || (ans.hints || []).slice(-1)[0]) : `${esc(ans.verdict)}${ans.reason ? ' ' + esc(ans.reason) : ''}`;
-      tl.bubbles.push({ a: a.id, t: pb, dur: 3, html: `<span class="who">${esc(e.npc)} · paid ${PRICE[e.npc]} NEAR</span>${said}` });
+      const said = e.npc === 'scout' ? esc(ans.report) : e.npc === 'cryptographer' ? esc(ans.report || (ans.hints || []).slice(-1)[0])
+        : e.npc === 'analyst' ? `<i>“${esc(brief(ans.opinion, 120))}”</i>` : `${esc(ans.verdict)}${ans.reason ? ' ' + esc(ans.reason) : ''}`;
+      tl.bubbles.push({ a: a.id, t: pb, dur: e.npc === 'analyst' ? 4.5 : 3, html: `<span class="who">${esc(e.npc)} · paid ${PRICE[e.npc]} NEAR</span>${said}` });
       tl.coins.push({ t: pb - 0.6, from: slot('lead'), to: slot(kind, e.target), text: `−${PRICE[e.npc]} Ⓝ` });
     } else if (e.kind === 'plan') {
       tl.plan = { t: pb + 0.6, bag: e.plan?.bag || [] };
@@ -462,7 +467,7 @@ function drawField() {
     const s = S.actors[b.a]; if (!s) return '';
     const below = /^(cracker|hcrypto):/.test(b.a);
     const pos = add(s.pos, [0, below ? 8 : -50]);
-    const x = Math.min(860, Math.max(140, pos[0]));
+    const x = Math.min(840, Math.max(160, pos[0])); // a full-width bubble (30%) stays inside the field
     return `<div class="bubble ${b.cls || ''} ${below ? 'below' : ''}" style="left:${x / 10}%;top:${(below ? Math.min(400, pos[1]) : Math.max(100, pos[1])) / 5}%;opacity:${Math.min(1, b.k * 8, (1 - b.k) * 6 + 0.15)}">${b.html}</div>`;
   }).join('');
   $('#coins', field.el).innerHTML = S.coins.map((c) => {
@@ -539,7 +544,9 @@ function eventRow(e) {
   if (k === 'bench') { label = 'crack'; k = 'crypto'; body = `Lock ${esc(e.lock)}: tried ${e.guess} — ${e.open ? '<b class="cleared">open</b>' : 'no'}${e.hint ? `<br><span class="clue">Hint: ${esc(e.hint)}</span>` : ''}`; }
   if (k === 'hire') {
     const a = e.answer || {};
-    const what = e.npc === 'scout' ? esc(a.report) : e.npc === 'cryptographer' ? (a.report ? esc(a.report) : `Hints for ${esc(a.lock)}: ${esc((a.hints || []).join(' / '))}`) : `${esc(a.verdict)}${a.reason ? ' ' + esc(a.reason) : ''}`;
+    const what = e.npc === 'scout' ? esc(a.report) : e.npc === 'cryptographer' ? (a.report ? esc(a.report) : `Hints for ${esc(a.lock)}: ${esc((a.hints || []).join(' / '))}`)
+      : e.npc === 'analyst' ? `Asked: <span class="clue">“${esc(a.question)}”</span><br>Opinion from the model <code>${esc(a.model)}</code> (it can be wrong): ${esc(brief(a.opinion, 700))}`
+      : `${esc(a.verdict)}${a.reason ? ' ' + esc(a.reason) : ''}`;
     body = `Hired the <b>${esc(e.npc)}</b> · <span class="hidden">${esc(e.receipt)}</span>${e.explorer ? ` · <a href="${esc(e.explorer)}" target="_blank" rel="noopener" style="color:var(--near)">payment ${esc(e.tx.slice(0, 10))}… ↗</a>` : ''}<br>${what}`;
   }
   if (k === 'plan') body = `Plan submitted: bag [${esc((e.plan?.bag || []).join(', '))}], ${(e.plan?.steps || []).length} steps`;

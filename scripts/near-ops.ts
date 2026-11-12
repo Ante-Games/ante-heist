@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { Account, JsonRpcProvider, KeyPair, nearToYocto } from 'near-api-js';
 import { sha256Hex } from '../game/src/heist.ts';
-import { NPC_PRICE_YOCTO, formatNear } from '../game/src/rules.ts';
+import { NPC_PRICE_YOCTO, formatNear, type Npc } from '../game/src/rules.ts';
 import { playScripted } from '../game/lead/scripted.ts';
 
 export const WASM = 'contract/target/near/ante_heist_contract.wasm';
@@ -33,6 +33,7 @@ export interface MissionEnv {
   SCOUT_PRIVATE_KEY: string;
   CRYPTOGRAPHER_PRIVATE_KEY: string;
   OPERATOR_PRIVATE_KEY: string;
+  ANALYST_PRIVATE_KEY: string;
   HEIST_CONTRACT_PRIVATE_KEY: string;
 }
 
@@ -46,7 +47,7 @@ export async function setupMission(o: {
   if (!existsSync(WASM)) throw new Error('build the contract first: cd contract && cargo near build non-reproducible-wasm');
 
   const fund: Record<string, string> = {
-    heist: o.contractNear ?? '2', settler: '0.5', scout: '0.1', cryptographer: '0.1', operator: '0.1', player: o.playerNear ?? '1.5',
+    heist: o.contractNear ?? '2', settler: '0.5', scout: '0.1', cryptographer: '0.1', operator: '0.1', analyst: '0.1', player: o.playerNear ?? '1.5',
   };
   const keys: Record<string, string> = {};
   for (const [prefix, amount] of Object.entries(fund)) {
@@ -64,6 +65,11 @@ export async function setupMission(o: {
   await contract.callFunction({
     contractId, methodName: 'new', gas: TGAS(50),
     args: { owner: o.ownerId, settler: `settler.${o.ownerId}`, scout: `scout.${o.ownerId}`, cryptographer: `cryptographer.${o.ownerId}`, operator: `operator.${o.ownerId}` },
+  });
+  // The analyst is set after init: it is stored under its own key so older deployments can add it by upgrade.
+  await owner.callFunction({
+    contractId, methodName: 'set_npc', gas: TGAS(30),
+    args: { npc: 'analyst', account: `analyst.${o.ownerId}`, price: NPC_PRICE_YOCTO.analyst.toString() },
   });
   log(`deployed and initialised ${contractId}`);
 
@@ -90,6 +96,7 @@ export async function setupMission(o: {
     SCOUT_PRIVATE_KEY: keys.scout,
     CRYPTOGRAPHER_PRIVATE_KEY: keys.cryptographer,
     OPERATOR_PRIVATE_KEY: keys.operator,
+    ANALYST_PRIVATE_KEY: keys.analyst,
     HEIST_CONTRACT_PRIVATE_KEY: keys.heist,
   };
 }
@@ -108,7 +115,7 @@ export async function playOnChain(o: {
     contractId: o.contractId, methodName: 'start_run', gas: TGAS(30), deposit: nearToYocto('0.01'), args: { mission_id: o.missionId },
   });
   log(`on chain: start_run → run_id ${runId}`);
-  const pay = async (npc: 'scout' | 'cryptographer' | 'operator') => {
+  const pay = async (npc: Npc) => {
     const out = await player.callFunctionRaw({
       contractId: o.contractId, methodName: 'hire', gas: TGAS(30), deposit: nearToYocto(PRICE[npc]), args: { run_id: runId, npc },
     }) as { transaction: { hash: string }; status: { SuccessValue?: string } };

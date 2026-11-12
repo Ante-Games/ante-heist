@@ -1,7 +1,7 @@
 // A scripted lead: plays a heist over the HTTP API with no model and no API keys.
 // It exists so judges can reproduce a full run with one command. A real agent plays the
 // same API from /skill.md.
-import { OBSTACLES, ROOMS, GEAR, BAG_CAPACITY, BENCH_MAX, LOCK_HINT_AT, type Obstacle, type RoomId } from '../src/rules.ts';
+import { OBSTACLES, ROOMS, GEAR, BAG_CAPACITY, BENCH_MAX, LOCK_HINT_AT, type Npc, type Obstacle, type RoomId } from '../src/rules.ts';
 import { ROOM_CLUES } from '../src/content.ts';
 import { routes, planRoute, locksOnRoute, type Knowledge } from '../src/solver.ts';
 import type { LockId } from '../src/heist.ts';
@@ -9,7 +9,7 @@ import type { Plan } from '../src/sim.ts';
 
 export interface Pay {
   // Returns the "payment" field for a hire: {"mock":true} locally, {"hireIndex":n} on testnet.
-  (npc: 'scout' | 'cryptographer' | 'operator'): Promise<unknown>;
+  (npc: Npc): Promise<unknown>;
 }
 
 export interface LeadOptions {
@@ -122,6 +122,21 @@ export async function playScripted(o: LeadOptions): Promise<{ runId: string; tra
     .sort((a, b) => a.locks.length - b.locks.length || a.weight - b.weight || a.route.length - b.route.length);
   const choice = options[0];
   log(`  route ${choice.route.join(' → ')} (locks: ${choice.locks.join(', ')}; bag weight ${choice.weight})`);
+
+  // The hiring lead also asks the analyst (a language model) for a second opinion, when this
+  // server has one. The script only logs the opinion: it already knows its route.
+  if (o.style === 'hire') {
+    const rules = await call<{ npcs: { analyst?: { available?: boolean } } }>(o.base, '/rules');
+    if (rules.npcs.analyst?.available) {
+      const question = `I plan the route ${choice.route.join(' > ')}. From what I have seen, is there a lighter or safer route?`;
+      try {
+        const r = await p('hire', { npc: 'analyst', question, payment: await o.pay!('analyst') });
+        log(`  hired analyst (${r.model}): ${String(r.opinion).replace(/\s+/g, ' ').slice(0, 220)}`);
+      } catch (e) {
+        log(`  analyst did not answer: ${(e as Error).message}`);
+      }
+    }
+  }
 
   // 3. Crack the route's locks in parallel; each lock's bench is one-at-a-time.
   await Promise.all(choice.locks.map(async (lock: LockId) => {

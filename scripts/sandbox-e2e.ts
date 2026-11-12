@@ -19,13 +19,15 @@ try {
   const n = near(rpcUrl);
 
   const chain = new TestnetChain(rpcUrl, env.HEIST_CONTRACT_ID, env.HEIST_MISSION_ID, env.SETTLER_ACCOUNT_ID, env.SETTLER_PRIVATE_KEY);
-  const runs = new Runs({ missionSecret: env.HEIST_MISSION_SECRET, chain, timeScale: 0, dataDir: null });
+  // The analyst's model is stubbed here; its on-chain payment is real.
+  const analyst = { provider: 'stub', models: ['stub-1'], ask: async () => ({ text: 'Your route looks fine.', model: 'stub-1' }) };
+  const runs = new Runs({ missionSecret: env.HEIST_MISSION_SECRET, chain, timeScale: 0, dataDir: null, analyst });
   const http = makeServer(runs, chain);
   await new Promise<void>((r) => http.listen(0, r));
   server.close = () => http.close();
   const base = `http://localhost:${(http.address() as { port: number }).port}`;
 
-  const npcBefore = await Promise.all(['scout', 'cryptographer', 'operator'].map((p) => n.balance(`${p}.sandbox`)));
+  const npcBefore = await Promise.all(['scout', 'cryptographer', 'operator', 'analyst'].map((p) => n.balance(`${p}.sandbox`)));
   const playerBefore = await n.balance(env.PLAYER_ACCOUNT_ID);
   const play = (style: 'hire' | 'solo' | 'reckless') => playOnChain({
     rpcUrl, base, contractId: env.HEIST_CONTRACT_ID, missionId: env.HEIST_MISSION_ID,
@@ -39,12 +41,14 @@ try {
   assert.equal(BigInt(hire.run.reward_paid), ONE);
   assert.ok(hire.transcript.log.some((e) => e.kind === 'settle' && e.ok), 'settlement recorded');
 
-  const npcAfter = await Promise.all(['scout', 'cryptographer', 'operator'].map((p) => n.balance(`${p}.sandbox`)));
+  const npcAfter = await Promise.all(['scout', 'cryptographer', 'operator', 'analyst'].map((p) => n.balance(`${p}.sandbox`)));
   const gained = npcAfter.map((b, i) => b - npcBefore[i]);
   const P = NPC_PRICE_YOCTO;
   assert.equal(gained[0], 4n * P.scout, 'scout paid for 4 rooms');
   assert.equal(gained[1] % P.cryptographer, 0n, 'cryptographer paid whole hires');
   assert.equal(gained[2], P.operator, 'operator paid for one dry run');
+  assert.equal(gained[3], P.analyst, 'analyst paid for one question');
+  assert.ok(hire.transcript.log.some((e) => e.kind === 'hire' && (e as { npc?: string }).npc === 'analyst'), 'the analyst hire is in the transcript');
   const hires = hire.transcript.log.filter((e) => e.kind === 'hire') as { tx?: string; explorer?: string }[];
   assert.ok(hires.length > 0 && hires.every((h) => h.tx && h.explorer?.includes(h.tx)), 'every hire carries its checked tx hash and explorer link');
   const tx = hire.transcript.settlement;

@@ -4,12 +4,13 @@
 import { Runs } from '../src/runs.ts';
 import { MockChain } from '../src/chain.ts';
 import { makeServer } from '../src/server.ts';
+import { analystFromEnv } from '../src/analyst.ts';
 import { playScripted } from './scripted.ts';
 
 const serve = process.argv.includes('--serve');
 const port = Number(process.env.PORT ?? 8787);
 const chain = new MockChain();
-const runs = new Runs({ missionSecret: 'local-demo-secret', chain, timeScale: Number(process.env.HEIST_TIME_SCALE ?? 0.02), dataDir: process.env.HEIST_DATA_DIR ?? 'data/runs' });
+const runs = new Runs({ missionSecret: 'local-demo-secret', chain, timeScale: Number(process.env.HEIST_TIME_SCALE ?? 0.02), dataDir: process.env.HEIST_DATA_DIR ?? 'data/runs', analyst: analystFromEnv(process.env) });
 const server = makeServer(runs, chain);
 await new Promise<void>((r) => server.listen(port, r));
 const base = `http://localhost:${port}`;
