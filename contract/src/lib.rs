@@ -89,9 +89,9 @@ impl Contract {
         Self {
             owner,
             settler,
-            scout: NpcInfo { account: scout, price: NearToken::from_millinear(200) },
-            cryptographer: NpcInfo { account: cryptographer, price: NearToken::from_millinear(300) },
-            operator: NpcInfo { account: operator, price: NearToken::from_millinear(300) },
+            scout: NpcInfo { account: scout, price: NearToken::from_millinear(250) },
+            cryptographer: NpcInfo { account: cryptographer, price: NearToken::from_millinear(400) },
+            operator: NpcInfo { account: operator, price: NearToken::from_millinear(400) },
             missions: IterableMap::new(b"m"),
             runs: Vector::new(b"r"),
         }
@@ -310,12 +310,12 @@ mod tests {
         assert_eq!(id, 0);
         ctx("lead.testnet", NearToken::from_millinear(250));
         assert_eq!(c.hire(id, Npc::Scout), 0);
-        ctx("lead.testnet", NearToken::from_millinear(300));
+        ctx("lead.testnet", NearToken::from_millinear(400));
         assert_eq!(c.hire(id, Npc::Operator), 1);
         let run = c.get_run(id).unwrap();
         assert_eq!(run.hires.len(), 2);
         assert_eq!(run.hires[0].npc, Npc::Scout);
-        assert_eq!(run.hires[0].paid, NearToken::from_millinear(200));
+        assert_eq!(run.hires[0].paid, NearToken::from_millinear(250));
 
         ctx("settler.testnet", NearToken::from_yoctonear(0));
         c.settle_run(id, true);
@@ -359,7 +359,7 @@ mod tests {
     fn hire_needs_the_price() {
         let mut c = setup();
         let id = start(&mut c, "lead.testnet");
-        ctx("lead.testnet", NearToken::from_millinear(299));
+        ctx("lead.testnet", NearToken::from_millinear(399));
         c.hire(id, Npc::Operator);
     }
 

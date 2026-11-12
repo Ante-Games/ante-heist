@@ -1,7 +1,8 @@
 import { NPC_PRICE_YOCTO, REWARD_YOCTO, formatNear, type Npc } from './rules.ts';
 
 export interface StartCheck { ok: boolean; player: string | null; error?: string }
-export interface HireCheck { ok: boolean; receipt: string; error?: string }
+// `tx`/`explorer` prove the payment on chain; `paidTo` is the NPC account that received it.
+export interface HireCheck { ok: boolean; receipt: string; error?: string; paid?: string; paidTo?: string; tx?: string; explorer?: string }
 export interface SettleResult { ok: boolean; detail: string; tx?: string; explorer?: string }
 
 // What the game server needs from the chain. The server never moves funds itself except
@@ -34,7 +35,7 @@ export class MockChain implements Chain {
     if (!payment || typeof payment !== 'object' || (payment as { mock?: unknown }).mock !== true) {
       return { ok: false, receipt: '', error: 'mock chain: send "payment": {"mock": true}' };
     }
-    return { ok: true, receipt: `mock-hire-${++this.n}-${npc}` };
+    return { ok: true, receipt: `mock-hire-${++this.n}-${npc}`, paid: `${formatNear(NPC_PRICE_YOCTO[npc])} NEAR (mock, not paid)` };
   }
   async settle(_id: string | null, cleared: boolean): Promise<SettleResult> {
     return { ok: true, detail: cleared ? `mock: would pay ${formatNear(REWARD_YOCTO)} NEAR to the player` : 'mock: reward withheld' };
@@ -126,7 +127,51 @@ export class TestnetChain implements Chain {
     const h = run?.hires[idx as number];
     if (!h) return { ok: false, receipt, error: `no hire #${idx} on run ${chainRunId}` };
     if (h.npc.toLowerCase() !== npc) return { ok: false, receipt, error: `hire #${idx} paid the ${h.npc.toLowerCase()}, not the ${npc}` };
-    return { ok: true, receipt };
+    const paid = `${formatNear(BigInt(h.paid))} NEAR`;
+    const paidTo = await this.npcAccount(npc).catch(() => undefined);
+    // Optional proof: the hash of the player's `hire` transaction. It is checked, then echoed with an explorer link.
+    const tx = (payment as { tx?: unknown }).tx;
+    if (tx === undefined) {
+      return { ok: true, receipt, paid, paidTo, ...(paidTo ? { explorer: `https://testnet.nearblocks.io/address/${paidTo}` } : {}) };
+    }
+    if (typeof tx !== 'string' || !/^[1-9A-HJ-NP-Za-km-z]{32,64}$/.test(tx)) return { ok: false, receipt, error: '"payment.tx" must be the hire transaction hash' };
+    const why = await this.checkHireTx(tx, run!.player, chainRunId, idx as number);
+    if (why) return { ok: false, receipt, error: `payment.tx ${tx}: ${why}` };
+    return { ok: true, receipt, paid, paidTo, tx, explorer: `https://testnet.nearblocks.io/txns/${tx}` };
+  }
+
+  private npcAccounts = new Map<Npc, string>();
+  private async npcAccount(npc: Npc): Promise<string> {
+    if (!this.npcAccounts.has(npc)) this.npcAccounts.set(npc, (await this.view<{ account: string }>('get_npc', { npc })).account);
+    return this.npcAccounts.get(npc)!;
+  }
+
+  // The transaction must be the player's own `hire` call on this contract, for this run, and it
+  // must have returned this hire index. Returns null when it checks out, or the reason it doesn't.
+  private async checkHireTx(hash: string, player: string, chainRunId: string, idx: number): Promise<string | null> {
+    const res = await fetch(this.rpcUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 'heist', method: 'tx', params: { tx_hash: hash, sender_account_id: player, wait_until: 'EXECUTED_OPTIMISTIC' } }),
+    });
+    const body = (await res.json()) as {
+      error?: { cause?: { name?: string }; message?: string };
+      result?: { status?: { SuccessValue?: string }; transaction?: { signer_id: string; receiver_id: string; actions: unknown[] } };
+    };
+    if (body.error) return body.error.cause?.name === 'UNKNOWN_TRANSACTION' ? `not found as a transaction sent by ${player}` : `rpc: ${body.error.message ?? 'error'}`;
+    const t = body.result?.transaction;
+    if (!t || t.receiver_id !== this.contractId) return `not a call to ${this.contractId}`;
+    const call = t.actions
+      .map((a) => (a as { FunctionCall?: { method_name: string; args: string } }).FunctionCall)
+      .find((f) => f?.method_name === 'hire');
+    if (!call) return 'not a hire call';
+    let args: { run_id?: unknown };
+    try { args = JSON.parse(Buffer.from(call.args, 'base64').toString('utf8')); } catch { return 'unreadable hire arguments'; }
+    if (String(args.run_id) !== chainRunId) return `hired for run ${String(args.run_id)}, not run ${chainRunId}`;
+    const ret = body.result?.status?.SuccessValue;
+    if (ret === undefined) return 'the hire call did not succeed';
+    if (Buffer.from(ret, 'base64').toString('utf8') !== String(idx)) return `returned hire #${Buffer.from(ret, 'base64').toString('utf8')}, not #${idx}`;
+    return null;
   }
 
   private async settlerAccount() {

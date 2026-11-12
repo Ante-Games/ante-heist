@@ -33,14 +33,23 @@ async function route(req: IncomingMessage, res: ServerResponse, runs: Runs, chai
     const proto = String(req.headers['x-forwarded-proto'] ?? 'http').split(',')[0];
     const base = process.env.PUBLIC_URL ?? `${proto}://${req.headers.host ?? 'localhost'}`;
     res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8' });
-    return res.end(readFileSync(join(PUBLIC, 'skill.md'), 'utf8').replaceAll('{{BASE}}', base));
+    const c = chain.describe() as { contract?: string; mission?: string };
+    return res.end(readFileSync(join(PUBLIC, 'skill.md'), 'utf8')
+      .replaceAll('{{BASE}}', base)
+      .replaceAll('{{CONTRACT}}', c.contract ?? 'CONTRACT')
+      .replaceAll('{{MISSION}}', c.mission ?? 'MISSION'));
   }
   if (m === 'GET' && url.pathname === '/rules') return json(res, 200, { ...runs.rules(), chain: chain.describe(), commitment: runs.commitment });
   if (m === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true });
 
+  if (m === 'GET' && url.pathname === '/leaderboard') return json(res, 200, runs.leaderboard());
+
   if (parts[0] === 'runs') {
     if (parts.length === 1 && m === 'GET') return json(res, 200, runs.list());
-    if (parts.length === 1 && m === 'POST') return json(res, 201, await runs.create(await body(req)));
+    if (parts.length === 1 && m === 'POST') {
+      limitStarts(req);
+      return json(res, 201, await runs.create(await body(req)));
+    }
     const id = parts[1];
     if (parts.length === 2 && m === 'GET') return json(res, 200, runs.view(id));
     if (parts.length === 3 && m === 'POST') {
@@ -54,6 +63,20 @@ async function route(req: IncomingMessage, res: ServerResponse, runs: Runs, chai
     }
   }
   throw new GameError(404, `no route ${m} ${url.pathname}; see /skill.md`);
+}
+
+// A basic per-IP limit on opening runs: START_LIMIT per START_WINDOW_MS.
+const START_LIMIT = Number(process.env.HEIST_START_LIMIT ?? 20);
+const START_WINDOW_MS = 10 * 60_000;
+const starts = new Map<string, number[]>();
+function limitStarts(req: IncomingMessage) {
+  const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '?').split(',')[0].trim();
+  const now = Date.now();
+  const recent = (starts.get(ip) ?? []).filter((t) => now - t < START_WINDOW_MS);
+  if (recent.length >= START_LIMIT) throw new GameError(429, `too many runs started from this address: ${START_LIMIT} per 10 minutes`);
+  recent.push(now);
+  starts.set(ip, recent);
+  if (starts.size > 10_000) starts.clear();
 }
 
 function json(res: ServerResponse, status: number, data: unknown) {

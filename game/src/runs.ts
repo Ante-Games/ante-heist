@@ -19,6 +19,9 @@ export class GameError extends Error {
   }
 }
 
+// What a hire paid, and the on-chain proof when the player sent the hire transaction hash.
+interface HirePayment { receipt: string; paid?: string; paidTo?: string; tx?: string; explorer?: string }
+
 interface Run {
   id: string;
   seed: string;
@@ -190,8 +193,10 @@ export class Runs {
       const c = await this.o.chain.checkHire(r.chainRunId, npc as Npc, body.payment, r.receipts);
       if (!c.ok) throw new GameError(402, c.error ?? 'payment not found');
       r.receipts.add(c.receipt);
+      payment = { receipt: c.receipt, paid: c.paid, paidTo: c.paidTo, tx: c.tx, explorer: c.explorer };
       return c.receipt;
     };
+    let payment: HirePayment = { receipt: '' };
     let receipt: string;
     if (npc === 'scout') {
       if (!isRoom(body.room)) throw new GameError(400, 'scout needs "room": A-D');
@@ -220,8 +225,8 @@ export class Runs {
       const sim = simulate(r.heist, plan, suspicion(r.log));
       answer = sim.cleared ? { verdict: 'This plan reaches the vault.' } : { verdict: 'This plan fails.', failedAtStep: sim.failedAt, reason: sim.reason };
     }
-    r.log.push({ t: this.t(r), kind: 'hire', npc, target, receipt, answer });
-    return { npc, receipt, ...(answer as object) };
+    r.log.push({ t: this.t(r), kind: 'hire', npc, target, receipt, answer, ...(payment.tx ? { tx: payment.tx, explorer: payment.explorer } : {}) });
+    return { npc, receipt, ...(answer as object), payment };
   }
 
   async submit(id: string, plan: unknown) {
@@ -275,6 +280,27 @@ export class Runs {
       return { runId: x.runId, player: x.player, status: x.status, startedAt: x.startedAt, reason: x.reason };
     });
     return [...active, ...done].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  }
+
+  // Finished runs grouped by player: most clears first, then fewest NPC hires, then the fastest clear.
+  leaderboard() {
+    const by = new Map<string, { player: string; runs: number; clears: number; hires: number; fastestClearSeconds: number | null; lastPayout: string | null }>();
+    for (const t of this.ended.values()) {
+      const x = t as { player: string | null; status: string; log: LogEvent[]; settlement: { explorer: string | null } | null };
+      if (!x.player) continue;
+      const row = by.get(x.player) ?? { player: x.player, runs: 0, clears: 0, hires: 0, fastestClearSeconds: null, lastPayout: null };
+      row.runs++;
+      row.hires += x.log.filter((e) => e.kind === 'hire').length;
+      if (x.status === 'cleared') {
+        row.clears++;
+        const plan = x.log.find((e) => e.kind === 'plan');
+        const secs = plan ? Math.round(plan.t / 1000) : null;
+        if (secs !== null && (row.fastestClearSeconds === null || secs < row.fastestClearSeconds)) row.fastestClearSeconds = secs;
+        row.lastPayout = x.settlement?.explorer ?? row.lastPayout;
+      }
+      by.set(x.player, row);
+    }
+    return [...by.values()].sort((a, b) => b.clears - a.clears || a.hires - b.hires || (a.fastestClearSeconds ?? 1e9) - (b.fastestClearSeconds ?? 1e9));
   }
 }
 

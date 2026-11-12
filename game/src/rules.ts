@@ -40,9 +40,9 @@ export const NPCS = ['scout', 'cryptographer', 'operator'] as const;
 export type Npc = (typeof NPCS)[number];
 // Prices in yoctoNEAR (1 NEAR = 10^24). Mirrored by the contract's defaults.
 export const NPC_PRICE_YOCTO: Record<Npc, bigint> = {
-  scout: 2n * 10n ** 23n, // 0.2 NEAR
-  cryptographer: 3n * 10n ** 23n, // 0.3 NEAR
-  operator: 3n * 10n ** 23n, // 0.3 NEAR
+  scout: 25n * 10n ** 22n, // 0.25 NEAR
+  cryptographer: 4n * 10n ** 23n, // 0.4 NEAR
+  operator: 4n * 10n ** 23n, // 0.4 NEAR
 };
 export const REWARD_YOCTO = 10n ** 24n; // 1 NEAR
 

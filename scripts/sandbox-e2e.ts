@@ -45,6 +45,8 @@ try {
   assert.equal(gained[0], 4n * P.scout, 'scout paid for 4 rooms');
   assert.equal(gained[1] % P.cryptographer, 0n, 'cryptographer paid whole hires');
   assert.equal(gained[2], P.operator, 'operator paid for one dry run');
+  const hires = hire.transcript.log.filter((e) => e.kind === 'hire') as { tx?: string; explorer?: string }[];
+  assert.ok(hires.length > 0 && hires.every((h) => h.tx && h.explorer?.includes(h.tx)), 'every hire carries its checked tx hash and explorer link');
   const tx = hire.transcript.settlement;
   assert.ok(tx?.tx && tx.explorer?.includes(tx.tx), 'settlement tx hash and explorer link recorded');
 

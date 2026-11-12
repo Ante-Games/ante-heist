@@ -7,7 +7,7 @@ export type LogEvent =
   | { t: number; kind: 'start'; runId: string; player: string | null; chainRunId: string | null }
   | { t: number; kind: 'probe'; room: string; tier: number; clue: string }
   | { t: number; kind: 'bench'; lock: string; guess: number; open: boolean; hint: string | null }
-  | { t: number; kind: 'hire'; npc: string; target: string; receipt: string; answer: unknown }
+  | { t: number; kind: 'hire'; npc: string; target: string; receipt: string; answer: unknown; tx?: string; explorer?: string }
   | { t: number; kind: 'plan'; plan: unknown }
   | { t: number; kind: 'settle'; ok: boolean; detail: string; tx?: string; explorer?: string };
 

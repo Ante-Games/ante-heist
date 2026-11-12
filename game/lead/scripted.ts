@@ -37,10 +37,10 @@ async function call<T>(base: string, path: string, body?: unknown): Promise<T> {
 // Reads tier-2 and tier-3 images (and the scout NPC's plain report) back into obstacles.
 export function readClear(clue: string): Obstacle | null {
   const c = clue.toLowerCase();
-  if (/(\bdoor\b|keypad|digits|buttons)/.test(c)) return 'door';
-  if (/(shaft|pit|drop|floor stops|bolts|line from above|swing)/.test(c)) return 'shaft';
-  if (/(laser|threads|beams|lines of light|pulled tight)/.test(c)) return 'laser';
-  if (/(camera|red light turns|glass|watches|lens|dome)/.test(c)) return 'camera';
+  if (/(\bdoor\b|keypad|digits|buttons|panel)/.test(c)) return 'door';
+  if (/(shaft|pit|drop|floor stops|floor simply stops|to land|gap that|bolts|line from above|swing)/.test(c)) return 'shaft';
+  if (/(laser|threads|beams|lines of light|red lines|straight lines|pulled tight)/.test(c)) return 'laser';
+  if (/(camera|turns when you move|whir|watched|glass|watches|lens|dome)/.test(c)) return 'camera';
   return null;
 }
 

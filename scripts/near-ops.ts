@@ -109,11 +109,12 @@ export async function playOnChain(o: {
   });
   log(`on chain: start_run → run_id ${runId}`);
   const pay = async (npc: 'scout' | 'cryptographer' | 'operator') => {
-    const hireIndex = await player.callFunction<number>({
+    const out = await player.callFunctionRaw({
       contractId: o.contractId, methodName: 'hire', gas: TGAS(30), deposit: nearToYocto(PRICE[npc]), args: { run_id: runId, npc },
-    });
-    log(`  on chain: hire(${npc}) paid ${PRICE[npc]} NEAR → hire #${hireIndex}`);
-    return { hireIndex };
+    }) as { transaction: { hash: string }; status: { SuccessValue?: string } };
+    const hireIndex = Number(Buffer.from(out.status.SuccessValue ?? '', 'base64').toString());
+    log(`  on chain: hire(${npc}) paid ${PRICE[npc]} NEAR → hire #${hireIndex} (tx ${out.transaction.hash})`);
+    return { hireIndex, tx: out.transaction.hash };
   };
   const { transcript } = await playScripted({ base: o.base, style: o.style, pay, start: { player: o.playerId, chainRunId: String(runId) }, log });
   const run = await n.view<{ outcome: string | null; reward_paid: string; hires: unknown[] }>(o.contractId, 'get_run', { run_id: runId });
