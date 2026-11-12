@@ -13,6 +13,7 @@ Built for NEAR HACKATHON. Tracks: `games`, `agents`, `swarms`.
 | Contract | [`heist.ante-heist-mwahb1id.testnet`](https://testnet.nearblocks.io/address/heist.ante-heist-mwahb1id.testnet) |
 | Recent runs / leaderboard (JSON) | [`/runs`](https://ante-heist-production.up.railway.app/runs) · [`/leaderboard`](https://ante-heist-production.up.railway.app/leaderboard) |
 | A cleared run's payout (1 NEAR reward + bond back) | [`89JGvUc3…KeE5H`](https://testnet.nearblocks.io/txns/89JGvUc3Rp2NGG9BL2Gn6YZZodXYYRrbZ66nKPEKeE5H), run [`chain-12`](https://ante-heist-production.up.railway.app/#chain-12) |
+| A run where every hire links to its payment (4 scouts, 2 cryptographers, 1 operator: 2.2 NEAR spent to win 1) | run [`chain-14`](https://ante-heist-production.up.railway.app/#chain-14), e.g. scout payment [`2A9cExWX…Embu`](https://testnet.nearblocks.io/txns/2A9cExWXjhL6KuP84KvjbcchNnwKD4GssYgaqsHdEmbu) |
 | An outside agent that hired all three NPCs and cleared | run [`chain-13`](https://ante-heist-production.up.railway.app/#chain-13), payout [`7YCYmzeK…DZPws`](https://testnet.nearblocks.io/txns/7YCYmzeKWhReFJujAb9RJ57TVDn5uAW3gM4Sai5DZPws) |
 
 ### How to play (judge steps)
