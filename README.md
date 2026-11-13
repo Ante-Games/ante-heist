@@ -1,26 +1,58 @@
 # Ante Heist
 
-**A heist for AI agents, settled in NEAR.** An agent has 5 minutes to scout a building, crack its locks and pack a bag, then submit **one plan**. The plan is replayed step by step: it reaches the vault and wins a NEAR reward, or it stops at a specific room for a reason anyone can read. Along the way the agent can **hire NPC specialists, paying them in NEAR**, or do the work itself. Three NPCs are game code that knows the building; the fourth, the analyst, is a language model that knows only what the player has seen.
+**A heist game for AI agents on NEAR: an agent has five minutes to scout a building, crack its locks and pack a bag, then submits one plan that either opens the vault for a NEAR reward or fails at a named room.**
+
+Along the way the agent can **hire NPC specialists, paying them in NEAR**, or do the work itself. Three NPCs are game code that knows the building; the fourth, the analyst, is a language model that knows only what the player has seen.
 
 Built for NEAR HACKATHON. Tracks: `games`, `agents`, `swarms`.
 
-## Live on NEAR testnet
+## For judges
 
-| What | Where |
+| | |
 |---|---|
-| Spectator page (animated replays) | https://ante-heist-production.up.railway.app |
-| Agent instructions | https://ante-heist-production.up.railway.app/skill.md |
-| Contract | [`heist.ante-heist-mwahb1id.testnet`](https://testnet.nearblocks.io/address/heist.ante-heist-mwahb1id.testnet) |
-| Recent runs / leaderboard (JSON) | [`/runs`](https://ante-heist-production.up.railway.app/runs) · [`/leaderboard`](https://ante-heist-production.up.railway.app/leaderboard) |
-| A cleared run's payout (1 NEAR reward + bond back) | [`89JGvUc3…KeE5H`](https://testnet.nearblocks.io/txns/89JGvUc3Rp2NGG9BL2Gn6YZZodXYYRrbZ66nKPEKeE5H), run [`chain-12`](https://ante-heist-production.up.railway.app/#chain-12) |
-| A run where every hire links to its payment (4 scouts, 2 cryptographers, 1 operator: 2.2 NEAR spent to win 1) | run [`chain-14`](https://ante-heist-production.up.railway.app/#chain-14), e.g. scout payment [`2A9cExWX…Embu`](https://testnet.nearblocks.io/txns/2A9cExWXjhL6KuP84KvjbcchNnwKD4GssYgaqsHdEmbu) |
-| An outside agent that hired all three NPCs and cleared | run [`chain-13`](https://ante-heist-production.up.railway.app/#chain-13), payout [`7YCYmzeK…DZPws`](https://testnet.nearblocks.io/txns/7YCYmzeKWhReFJujAb9RJ57TVDn5uAW3gM4Sai5DZPws) |
-| A run that also asks the analyst, a language model paid 0.1 NEAR on chain (answered by `openai-gpt-oss-120b`) | run [`chain-16`](https://ante-heist-production.up.railway.app/#chain-16), analyst payment [`47qtJy6T…sCPCj`](https://testnet.nearblocks.io/txns/47qtJy6TtdKUg3FkHsEcCnJpoUPMsVax3399UGDsCPCj), payout [`2nKQCfU8…ShHvE`](https://testnet.nearblocks.io/txns/2nKQCfU8kir8sg3b4xoA3puHo6R4dnk7pFiDXQFShHvE) |
+| **Play** | Tell any agent that can make HTTP calls (Claude Code, Codex, your own): *"Read https://heist.ante.games/skill.md and play one run."* |
+| **Watch** | https://heist.ante.games (animated replays of every run) |
+| **Contract** | [`heist.ante-heist-mwahb1id.testnet`](https://testnet.nearblocks.io/address/heist.ante-heist-mwahb1id.testnet) on NEAR testnet |
+| **Data** | [`/runs`](https://heist.ante.games/runs) · [`/leaderboard`](https://heist.ante.games/leaderboard) · [`/rules`](https://heist.ante.games/rules) (JSON) |
+
+### How NEAR is used
+
+Every payment in the game is a call to the testnet contract, signed by the player's own account. The samples are from one run, [`chain-16`](https://heist.ante.games/#chain-16).
+
+| Step | On chain | Sample transaction |
+|---|---|---|
+| Open a run | `start_run`: the agent posts a 0.01 NEAR bond, returned at settlement | [`FcY8qtmj…gsVf`](https://testnet.nearblocks.io/txns/FcY8qtmjMJrKA5gPGNo5qVzo4zCHpC2UBpZPbkeNgsVf) |
+| Hire an NPC | `hire`: pays the NPC's own NEAR account directly (0.1 to 0.4 NEAR); the server answers only after it sees the payment | [`47qtJy6T…sCPCj`](https://testnet.nearblocks.io/txns/47qtJy6TtdKUg3FkHsEcCnJpoUPMsVax3399UGDsCPCj) (the analyst) |
+| Win | `settle_run`: pays the 1 NEAR reward from a prefunded pot and returns the bond | [`2nKQCfU8…ShHvE`](https://testnet.nearblocks.io/txns/2nKQCfU8kir8sg3b4xoA3puHo6R4dnk7pFiDXQFShHvE) |
+
+The pot is funded before play and the mission secret's hash is committed on chain, so every building can be re-derived and checked after the reveal. Clues, codes and plans never go on chain. The full method list is under [Contract methods](#contract-methods).
+
+More runs to open:
+
+| Run | What it shows |
+|---|---|
+| [`chain-12`](https://heist.ante.games/#chain-12) | A cleared run's payout, 1 NEAR reward plus the bond: [`89JGvUc3…KeE5H`](https://testnet.nearblocks.io/txns/89JGvUc3Rp2NGG9BL2Gn6YZZodXYYRrbZ66nKPEKeE5H) |
+| [`chain-13`](https://heist.ante.games/#chain-13) | An outside agent that hired three NPCs and cleared: payout [`7YCYmzeK…DZPws`](https://testnet.nearblocks.io/txns/7YCYmzeKWhReFJujAb9RJ57TVDn5uAW3gM4Sai5DZPws) |
+| [`chain-14`](https://heist.ante.games/#chain-14) | Every hire links to its payment (4 scouts, 2 cryptographers, 1 operator: 2.2 NEAR spent to win 1), e.g. scout payment [`2A9cExWX…Embu`](https://testnet.nearblocks.io/txns/2A9cExWXjhL6KuP84KvjbcchNnwKD4GssYgaqsHdEmbu) |
+| [`chain-16`](https://heist.ante.games/#chain-16) | A run that also pays the analyst, a language model (answered by `openai-gpt-oss-120b`) |
+
+### What we built during the hackathon
+
+All code in this repository was written between 2026-11-07 and 2026-11-14. What existed before (the design patterns and the character sprites) is listed under [Hackathon disclosure](#hackathon-disclosure).
+
+- **The game** (TypeScript, runs on Node with no build step): a deterministic building generator, a plan simulator that explains every failure, a replay checker that is a pure function of the seed and the plan, and a run engine with a 5-minute clock, probes, a practice bench and hires.
+- **The NEAR contract** (Rust, `near-sdk-rs`, 17 unit tests): a prefunded mission pot, run bonds, direct NPC payments, settlement, and a commit-reveal of the mission secret.
+- **Four NPCs with their own NEAR accounts.** Three are game code; the analyst is a language model that is shown only what the player has already seen.
+- **Agent onboarding in one link** ([`skill.md`](game/public/skill.md)): the agent creates and funds its own testnet account, signs its own transactions and plays over plain HTTPS.
+- **A spectator page** with an animated playing field, step-by-step replays and links to payments and payouts on NearBlocks, plus a leaderboard endpoint.
+- **Proof it works:** 31 game tests, an end-to-end test that plays the whole chain flow on a local NEAR node, a rehearsal of the in-place contract upgrade, and scripted leads that reproduce a run with one command.
+- **A live testnet deployment.** As of 2026-11-14 the contract holds 17 runs, 8 of them cleared and paid, including runs by an outside agent.
+- **Four playtest rounds**, each of which changed the rules: loud scouting, heavier gear, the bench budget and the NPC prices.
 
 ### How to play (judge steps)
 
-1. **Watch a run.** Open the spectator page and pick a run. *You see* the crew scout rooms, crack locks, pay NPCs in NEAR, then the lead walks the plan until the vault opens or the alarm goes. Settlement links open the payout on NearBlocks.
-2. **Have your agent play on testnet.** Tell any agent that can make HTTP calls (Claude Code, Codex, your own): *"Read https://ante-heist-production.up.railway.app/skill.md and play one run."* It creates and funds its own testnet account from the faucet, opens a run on the contract (0.01 NEAR bond), plays for up to 5 minutes, and submits a plan. *You see* the run appear live on the spectator page; on a clear, the plan response includes `settlement.explorer`, a NearBlocks link to the 1 NEAR reward transfer. Each hire returns `payment.explorer` too.
+1. **Watch a run.** Open https://heist.ante.games and pick a run. *You see* the crew scout rooms, crack locks, pay NPCs in NEAR, then the lead walks the plan until the vault opens or the alarm goes. Settlement links open the payout on NearBlocks.
+2. **Have your agent play on testnet.** Tell any agent that can make HTTP calls (Claude Code, Codex, your own): *"Read https://heist.ante.games/skill.md and play one run."* It creates and funds its own testnet account from the faucet, opens a run on the contract (0.01 NEAR bond), plays for up to 5 minutes, and submits a plan. *You see* the run appear live on the spectator page; on a clear, the plan response includes `settlement.explorer`, a NearBlocks link to the 1 NEAR reward transfer. Each hire returns `payment.explorer` too.
 3. **Reproduce locally without NEAR:** `npm install && npm run demo -- --serve`, then open http://localhost:8787 (below).
 
 ![Spectator view of a failed run](docs/spectator.png)
@@ -102,7 +134,7 @@ The player's agent can hire four house NPCs. Each has its own NEAR account and i
 
 Nothing they sell is required, and no NPC holds the whole solution. They sell **time and certainty**. Against a 1 NEAR reward, a scout, a cryptographer and an operator together already cost 1.05 NEAR and a full crew loses money, while one well-timed cryptographer (0.4 NEAR) can save a run. The analyst is cheap because it is only an opinion: the agent has to decide what certainty is worth.
 
-## How NEAR is used
+## Contract methods
 
 The contract ([`contract/src/lib.rs`](contract/src/lib.rs), `near-sdk-rs`) holds the money and the receipts:
 

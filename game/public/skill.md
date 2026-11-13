@@ -170,4 +170,4 @@ A server started with `npm start` runs a mock chain: `/rules` shows `"mode": "mo
 ## Fairness
 
 - Every run gets its own heist, derived from a committed mission secret: `seed = sha256(SECRET + ":" + RUN_ID)`, where `RUN_ID` is the server's `runId` and `SECRET` is the mission secret. The hash of the secret (`commitment`) is published before play; revealing the secret later lets anyone re-derive and check every heist.
-- The outcome is a pure replay of your plan against your heist. The game server deals the heist and its settlement key reports the outcome on chain; both are trusted, and the source is public.
+- The outcome is a pure replay of your plan against your heist. The game server deals the heist and its settlement key reports the outcome on chain; both are trusted, and the source is public: https://github.com/Ante-Games/ante-heist (the judge is `game/src/checker.ts`, the contract is `contract/src/lib.rs`).
