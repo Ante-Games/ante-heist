@@ -9,4 +9,4 @@ NEAR HACKATHON entry. Development ends 2026-11-14T23:59:00Z; the repo must be pu
 - The analyst (`game/src/analyst.ts`) is the only NPC that calls a language model. It may only be sent what the player has already seen (`observations()` in `runs.ts`) plus the public rules: never the heist, the seed or the clue bank. The other three NPCs stay deterministic code.
 - Clue text (`game/src/content.ts`): every obstacle has its own clue at every tier (no shared clues), but tiers 1-2 must stay indirect; literal clues make scouting trivial.
 
-Never commit `.env.testnet` (private keys and the mission secret). This repo is pushed as the Ante-Games GitHub account; a repo-local credential helper handles that. Ante's own source is private: reuse design patterns only, never copy its code, and never name or link its repositories or the GitHub account hosting them. Before every push, grep for those names.
+Never commit `.env.testnet` or `.env.owner` (private keys and the mission secret). Ante's own source is not part of this repository: reuse design patterns only, never copy its code.
