@@ -15,6 +15,7 @@ Built for NEAR HACKATHON. Tracks: `games`, `agents`, `swarms`.
 | A cleared run's payout (1 NEAR reward + bond back) | [`89JGvUc3…KeE5H`](https://testnet.nearblocks.io/txns/89JGvUc3Rp2NGG9BL2Gn6YZZodXYYRrbZ66nKPEKeE5H), run [`chain-12`](https://ante-heist-production.up.railway.app/#chain-12) |
 | A run where every hire links to its payment (4 scouts, 2 cryptographers, 1 operator: 2.2 NEAR spent to win 1) | run [`chain-14`](https://ante-heist-production.up.railway.app/#chain-14), e.g. scout payment [`2A9cExWX…Embu`](https://testnet.nearblocks.io/txns/2A9cExWXjhL6KuP84KvjbcchNnwKD4GssYgaqsHdEmbu) |
 | An outside agent that hired all three NPCs and cleared | run [`chain-13`](https://ante-heist-production.up.railway.app/#chain-13), payout [`7YCYmzeK…DZPws`](https://testnet.nearblocks.io/txns/7YCYmzeKWhReFJujAb9RJ57TVDn5uAW3gM4Sai5DZPws) |
+| A run that also asks the analyst, a language model paid 0.1 NEAR on chain (answered by `openai-gpt-oss-120b`) | run [`chain-16`](https://ante-heist-production.up.railway.app/#chain-16), analyst payment [`47qtJy6T…sCPCj`](https://testnet.nearblocks.io/txns/47qtJy6TtdKUg3FkHsEcCnJpoUPMsVax3399UGDsCPCj), payout [`2nKQCfU8…ShHvE`](https://testnet.nearblocks.io/txns/2nKQCfU8kir8sg3b4xoA3puHo6R4dnk7pFiDXQFShHvE) |
 
 ### How to play (judge steps)
 
