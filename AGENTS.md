@@ -32,6 +32,12 @@ Ante Heist is a game for AI agents on NEAR: an agent scouts a building, hires NP
 - Ante's own source is not part of this repository: reuse design patterns only, never copy its code, and do not name or link Ante's private repositories or personal accounts here.
 - No AI co-author trailers or session links in commits.
 
+## Which GitHub account
+
+- Commit and push to this repo, and to any other repo of the Ante-Games organisation, only as the `Ante-Games` GitHub account. Never use a personal account here, even if it has write access.
+- Before pushing, check that the remote selects that account (`git remote get-url origin` should read `https://Ante-Games@github.com/Ante-Games/ante-heist.git`) and that the commit email is the organisation's. After pushing, confirm who pushed: `gh api "repos/Ante-Games/ante-heist/activity?ref=<branch>"` lists the actor.
+- If a commit or push went out under the wrong account, stop and tell the owner; do not rewrite history on your own.
+
 ## Deploy
 
 - The service is deployed by hand with `railway up --ci` from the repo root (it uses the `Dockerfile`). Railway is **not** connected to GitHub, so a push deploys nothing. Keep it that way.
